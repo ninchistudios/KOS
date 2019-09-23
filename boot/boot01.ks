@@ -6,7 +6,7 @@ print "# KERPERIUM BOOTLOADER boot01.ks #".
 print "##################################".
 print " ".
 
-set misFile to "0:/PolarContract01.ks".
+set misFile to "0:/PolarContract02.ks".
 print "Mission Boot File: " + misFile.
 print "Go Flight: [G]".
 print "Abort: [A]".
