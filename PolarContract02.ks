@@ -42,6 +42,7 @@ function doSetup {
 // loops while program executing
 function doMain {
 
+  doPreservedTriggers().
   doAscentTriggers().
 
   until not AUTOPILOT {
@@ -57,15 +58,14 @@ function doMain {
 
 // set up ascent triggers
 function doAscentTriggers {
-  // stage if needed throughout the program
-  when stageNeeded() then {
-    doSafeStage().
-    preserve.
-  }
   // go ballistic once apo is at target orbit
-  when MY_VESSEL:APOAPSIS >= TGT_APO THEN {
+  when MY_VESSEL:APOAPSIS >= TGT_APO then {
     print "# BALLISTIC PHASE #".
     lock THROTTLE to 0.
+    // wait until above atmo to create node
+    when MY_VESSEL:ALTITUDE >= 70000 then {
+      createCircNode().
+    }
   }
   // blow accel-safe modules outside the atmo
   when MY_VESSEL:ALTITUDE > 60000 THEN {
@@ -83,6 +83,64 @@ function doAscentTriggers {
       lock steering to heading(ascentHeading(), ascentPitch()).
     }
   }
+}
+
+function createCircNode {
+  local circ is list().
+}
+
+function calculateStartTime {
+  parameter mnv.
+  return time:seconds + mnv:eta -maneuverBurnTime(mnv) / 2.
+}
+
+function maneuverBurnTime {
+  parameter mnv.
+  local dV is mnv:deltaV:mag.
+  local isp is 0.
+  local myEngines is 0.
+  list engines in myEngines.
+  for en in myEngines {
+    if en:ignition and not en:flameout {
+      set isp to isp + (en:isp * (en:AVAILABLETHRUST / MY_VESSEL:AVAILABLETHRUST)).
+    }
+  }
+  local mf is MY_VESSEL:mass / constant:e^(dV / (isp * constant:g0)).
+  local fuelFlow is MY_VESSEL:AVAILABLETHRUST / (isp * constant:g0).
+  local t is (MY_VESSEL:mass - mf) / fuelFlow.
+  return t.
+}
+
+function doPreservedTriggers {
+  // stage if needed throughout the program
+  when stageNeeded() then {
+    doSafeStage().
+    preserve.
+  }
+  // debug - prints maneuver time on AG9 toggle
+  when AG9 then {
+    if hasnode {
+      local n is nextnode.
+      print "BurnTime:" + ROUND(maneuverBurnTime(n),1) at (TERMINAL:WIDTH - 19,TERMINAL:HEIGHT - 3).
+      print "BurnStart:" + ROUND(calculateStartTime(n),1) at (TERMINAL:WIDTH - 20,TERMINAL:HEIGHT - 4).
+    }
+    AG9 off.
+    preserve.
+  }
+}
+
+function executeManeuver {
+  parameter utime, radial, normal, prograde.
+  local mnv is node(utime, radial, normal, prograde).
+  // addManeuverToFlightPlan(mnv).
+  // local startTime is calculateStartTime(mnv).
+  // wait until time:seconds > startTime - 10.
+  // lockSteeringAtManeuverTarget(mnv).
+  // wait until time:seconds > startTime.
+  // lock throttle to 1.
+  // wait until isManeuverComplete(mnv).
+  // lock throttle to 0.
+  // removeManeuverFromFlightPlan(mnv).
 }
 
 function ascentThrottle {
