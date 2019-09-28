@@ -58,7 +58,15 @@ function executeManeuver {
   lockSteeringAtManeuverTarget(mnv).
   wait until time:seconds > startTime.
   lock throttle to 1.
-  wait until isManeuverComplete(mnv).
+  // because this occurs in a preserved function, other preserved functions
+  // (such as checking staging) seem to be suspended, so we need to specifically
+  // check this one each tick
+  until isManeuverComplete(mnv) {
+    if stageNeeded(SHIP) {
+      doSafeStage().
+    }
+    wait 0.001.
+  }
   lock throttle to 0.
   unlock steering.
   removeManeuverFromFlightPlan(mnv).
