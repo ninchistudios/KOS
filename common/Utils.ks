@@ -3,6 +3,22 @@
 local LAST_T is 0.
 local TICK is 0.
 
+function towerThrottle {
+  wait 0.001.
+  return 1.
+}
+
+function hoverSteering {
+  return up.
+}
+
+// note this changes with fuel burn, so... TODO need to figure this out.
+function centreMassRadalt {
+  parameter launchRadAlt.
+  wait 0.001.
+  return ROUND(MAX(0.001,((ALTITUDE-GEOPOSITION:TERRAINHEIGHT)-launchRadAlt)),3).
+}
+
 function doCircularization {
   parameter vessel, est_dv.
   local circ is list(time:seconds + eta:APOAPSIS, 0, 0, est_dv).

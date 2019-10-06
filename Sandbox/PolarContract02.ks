@@ -25,7 +25,7 @@ local AUTOPILOT is true. // program will run until this is switched off
 local STAGE_ARM is true. // is staging armed
 local LAUNCH_ALT is ROUND(MY_VESSEL:ALTITUDE,1). // alt of the control module
 lock MY_Q to MY_VESSEL:Q * constant:ATMtokPa. // dynamic pressure in kPa
-local TPID is PIDLOOP(Tp, Tp, Td).
+local TPID is PIDLOOP(Tp, Ti, Td).
 
 // RUN
 doSetup().
@@ -49,7 +49,7 @@ function doSetup {
 function doMain {
 
   doPreservedTriggers().
-  doAscentTriggers().
+  doFlightTriggers().
 
   until not AUTOPILOT {
     print "Q:" + ROUND(MY_Q,3) at (TERMINAL:WIDTH - 12,TERMINAL:HEIGHT - 2).
@@ -59,7 +59,7 @@ function doMain {
 
 // set up ascent triggers
 // this is the main sequence of the flight plan
-function doAscentTriggers {
+function doFlightTriggers {
   // go ballistic once apo is at target orbit
   when MY_VESSEL:APOAPSIS >= TGT_APO then {
     print "# BALLISTIC PHASE #".
@@ -68,6 +68,13 @@ function doAscentTriggers {
     when MY_VESSEL:ALTITUDE >= 70000 then {
       print "# CIRCULARISING #".
       doCircularization(MY_VESSEL, EST_CIRC_DV).
+      local validInput is false.
+      print "# ADD MNV to MATCH APO AND [G] TO GO".
+      until (validInput and HASNODE)  {
+        set ch to terminal:input:getchar().
+        if (ch = "G") set validInput to true.
+      }
+      executeManeuver(NEXTNODE, MY_VESSEL).
       set STAGE_ARM to false.
       set AUTOPILOT to false.
     }
