@@ -13,7 +13,7 @@ function hoverSteering {
 }
 
 // note this changes with fuel burn, so... TODO need to figure this out.
-function centreMassRadalt {
+function baseRadalt {
   parameter launchRadAlt.
   wait 0.001.
   return ROUND(MAX(0.001,((ALTITUDE-GEOPOSITION:TERRAINHEIGHT)-launchRadAlt)),3).

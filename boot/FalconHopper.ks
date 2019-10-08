@@ -1,5 +1,5 @@
 core:part:getmodule("kOSProcessor"):doevent("Open Terminal").
-set terminal:width to 50.
+set terminal:width to 60.
 set terminal:height to 60.
 CLEARSCREEN.
 
