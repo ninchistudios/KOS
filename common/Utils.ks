@@ -15,8 +15,8 @@ function hoverSteering {
 // note this changes with fuel burn, so... TODO need to figure this out.
 function baseRadalt {
   parameter launchRadAlt.
-  wait 0.001.
-  return ROUND(MAX(0.001,((ALTITUDE-GEOPOSITION:TERRAINHEIGHT)-launchRadAlt)),3).
+  // wait 0.001.
+  return MAX(0.00001,((ALTITUDE-GEOPOSITION:TERRAINHEIGHT)-launchRadAlt)).
 }
 
 function doCircularization {
@@ -73,7 +73,8 @@ function executeManeuver {
   wait until time:seconds > startTime - 10.
   lockSteeringAtManeuverTarget(mnv).
   wait until time:seconds > startTime.
-  lock throttle to 1.
+  // lock throttle to 1.
+  lock throttle to max(min(mnv:burnvector:mag / (ship:availablethrust / ship:mass),1),0.005).
   // because this occurs in a preserved function, other preserved functions
   // (such as checking staging) seem to be suspended, so we need to specifically
   // check this one each tick

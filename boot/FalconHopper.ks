@@ -19,8 +19,9 @@ until validInput {
 if ch = "G" { // GO FLIGHT
   print "# GO FLIGHT #".
   // ## CONFIGURE MISSION ##
-  copypath("0:/FalconHopper/FalconHopperI.ks", "").
   copypath("0:/common/Utils.ks", "").
+  copypath("0:/FalconHopper/FalconHopperI.ks", "").
+  // runoncepath("Utils").
   runoncepath("FalconHopperI").
   // ## END CONFIGURE MISSION ##
 }
