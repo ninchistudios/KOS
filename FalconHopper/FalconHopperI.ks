@@ -15,9 +15,7 @@ local HTp is 0.05. // Hover Throttle P
 local HTi is 0.1. // Hover Throttle I
 local HTd is 0.15. // Hover Throttle D
 local HTPID is PIDLOOP(HTp,HTi,HTd,-.1,.05). // adjust last two values for throttle speed
-local Tmin is 0.01. // minimum throttle setting
-local Tcf is 1.2. // maximum throttle factor for hover climb
-local Tf is 1. // throttle factor
+local Tmin is 0.1. // minimum throttle setting
 local AUTOPILOT is true. // program will run until this is switched off
 local HOVER_MODE is false. // flag for the main loop
 local LAUNCH_AMSL is ROUND(ship:ALTITUDE,3). // AMSL of the control module
@@ -41,6 +39,12 @@ function doSetup {
   print "Target Hover: " + HAGL + "m AGL".
   print "Launch AMSL: " + LAUNCH_AMSL + "m".
   print "Launch AGL: " + LAUNCH_AGL + "m".
+  // print "dV check -100:" + desiredVv(-100).
+  // print "dV check -50:" + desiredVv(-50).
+  // print "dV check 0:" + desiredVv(0).
+  // print "dV check 50:" + desiredVv(50).
+  // print "dV check 100:" + desiredVv(100).
+  // print "TWR check 0:" + desiredTWR(10,10).
   lock vAngle to VANG(ship:facing:forevector, ship:up:forevector).
   lock Fg to (body:mu / body:radius^2) * mass.
   lock AGL to baseRadalt(LAUNCH_AGL).
@@ -86,11 +90,10 @@ function doFlightTriggers {
     lock throttle to towerThrottle().
     lock steering to up.
     stage.
-    wait 3.
-    stage.
     wait 1.
     rcs on.
-    when AGL > LAUNCH_AGL THEN {
+    // when AGL > LAUNCH_AGL THEN {
+    when true THEN {
       // cleared tower
       print "# HOVER PHASE #".
       lock steering to up. // hoverSteering().
@@ -104,19 +107,20 @@ function doPreservedTriggers {
 }
 
 function hoverThrottle {
-  // local thrott is throttle + HTPID:update(time:seconds, predictedRadalt()).
-  if (AGL > HAGL) {
-    // above target AGL
-    set Tf to 1 / MIN(1, (AGL - HAGL)). // TODO this is sketchy
-  } else if (HAGL > AGL) {
-    // below target AGL
-    // factor should be from 1 to Tcf
-    set Tf to MIN(Tcf, ((Tcf - 1) * (HAGL - AGL) / 100) +1).
-  } else {
-    set Tf to 1.
-  }
-  print "Tf:" + ROUND(Tf,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 13).
-  local thrott is Fg * Tf / COS(vAngle) / AVAILABLETHRUST.
+  // thrott = TWRd x Fg / AVAILABLETHRUST
+  // TWRd = (0.00012 * dV^3) + (0.000514286 * dV^2 + (0.003 * dV) +0.998286)
+  // dV = (0.0732601 * dH^3) - (17.326 * dH)
+  local dH is AGL - HAGL. // delta between desired height and actual height
+  print "dH:" + ROUND(dH,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 13).
+  local dV is desiredVv(dH). // desired surface velocity based on dH
+  print "dV:" + ROUND(dV,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 14).
+  local TWRd is desiredTWR(dV, ship:verticalspeed). // desired TWR
+  print "TWRd:" + ROUND(TWRd,3) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 15).
+  // local thrott is Fg * Tf / COS(vAngle) / AVAILABLETHRUST.
+  local vthrott is TWRd * Fg / max(1,AVAILABLETHRUST). // throttle assuming vertical
+  print "vthrott:" + ROUND(vthrott,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 16).
+  local thrott is vthrott / COS(vAngle).
+  print "thrott:" + ROUND(thrott,3) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 17).
   if (thrott < Tmin) {
     set thrott to Tmin.
     // TODO if we're still accelerating up we need to shutdown some engines
@@ -124,6 +128,20 @@ function hoverThrottle {
     set thrott to 1.
   }
   return thrott.
+}
+
+// basic function to calculate the desired vertical speed based on the distance from the target height
+function desiredVv {
+  parameter dH1.
+  return max(-20,min(10,(-0.00000533333 * dH1^3) + (0.000000000000000000243714 * dH1^2) - (.0466667 * dH1))).
+}
+
+// basic function to calculate the desired TWR based on the desired vertical speed and current vertical speed
+function desiredTWR {
+  parameter dv0,v0.
+  local dv1 is dv0 - v0.
+  // return max(0.8,min(1.3,(0.00012 * dV1^3) + (0.000514286 * dV1^2 + (0.003 * dV1) +0.998286))).
+  return max(0,min(1.3,(0.038118 + (0.961882 * (constant:e ^ (0.0770805 * dv1)))))).
 }
 
 function doHoverslam {
