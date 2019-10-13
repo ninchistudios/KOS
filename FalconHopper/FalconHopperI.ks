@@ -21,13 +21,15 @@ local HOVER_MODE is false. // flag for the main loop
 local SLAM_MODE is false. // time to do a hoverslam
 local LAUNCH_AMSL is ROUND(ship:ALTITUDE,3). // AMSL of the control module
 local LAUNCH_AGL is ROUND(MAX(0.001,(ALTITUDE-GEOPOSITION:TERRAINHEIGHT)),3). // AGL of the control module
-local HAGL is 100. // TARGET HOVER ALT METERS AGL
+local HAGL is 250. // TARGET HOVER ALT METERS AGL
 local PREDICTED is 0. // predicted radalt with current accel + vel
 local GAGL is 500. // engage gear below on descent
 local vAngle is 0. // angle from ship up to surface up
 local Fg is 0. // force of gravity on the ship
 local AGL is 0. // current AGL of the nozzles
+local tweak is -120. // hoverslam AGL tweak
 neutraliseRoll().
+set kuniverse:TimeWarp:MODE to "PHYSICS".
 
 // RUN
 doSetup().
@@ -81,7 +83,7 @@ function doMain {
     print "DryMass:" + ROUND(ship:drymass,1) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 8).
     print "WetMass:" + ROUND(ship:wetmass,1) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 9).
     if (HOVER_MODE) {
-      set throttle to hoverThrottle(). // TODO lock?
+
     }
     if (SLAM_MODE) {
       doHoverslam().
@@ -114,9 +116,11 @@ function doFlightTriggers {
     rcs on.
     // when AGL > LAUNCH_AGL THEN {
     when true THEN {
+      set warp to 3.
       // cleared tower
       print "# HOVER PHASE #".
       lock steering to up. // hoverSteering().
+      lock throttle to hoverThrottle().
       set HOVER_MODE to true.
       when (ship:mass < (2 * ship:drymass)) then {
         // hoverslam
@@ -125,6 +129,7 @@ function doFlightTriggers {
         when ship:verticalSpeed < 0 then {
           lock steering to srfRetrograde.
           AG7 on.
+          set warp to 0.
           when distanceToGround() < GAGL then {
              gear on.
           }
@@ -180,35 +185,40 @@ function desiredTWR {
 function doHoverslam {
   // stopping distance formula
   // sd = v^2 / 2a
-  lock steering to heading(0, 85).
+  lock steering to heading(180, 85).
   lock throttle to 1.
-  wait 15.
-  // lock throttle to Tmin.
-  // lock pct to stoppingDistance() / distanceToGround().
-  // wait until pct > 1.
-  // lock throttle to max(pct,Tmin).
-  // wait until ship:verticalSpeed > 0.
-  stage.
-  neutraliseRoll().
-  local throt is Tmin.
-  lock throttle to throt.
-  until AGL < 2 {
-    set throt to min(1,max(0,(((0.635/(1+constant:e^(5-1.5*(AGL+2))))+((AGL+2)/min(-1,(verticalspeed))))+(abs(verticalspeed)/(availablethrust/mass/COS(vAngle)))))).
+  wait 8.
+  lock throttle to Tmin.
+  AG8 on. // single engine
+  lock pct to stoppingDistance() / distanceToGround().
+  wait until pct > 1.
+  lock throttle to max(pct,Tmin).
+  // stage.
+  // AG8 on. // single engine
+  // neutraliseRoll().
+  // local throt is Tmin.
+  // lock throttle to throt.
+  //wait until ship:verticalSpeed > 0.
+  //lock throttle to 0.
+  until ship:status = "LANDED" {
+    print "DTG:" + ROUND(distanceToGround, 1) at (TERMINAL:WIDTH - 14,TERMINAL:HEIGHT - 3).
+    //set throt to min(1,max(0,(((0.635/(1+constant:e^(5-1.5*(ALTITUDE-GEOPOSITION:TERRAINHEIGHT))))+((ALTITUDE-GEOPOSITION:TERRAINHEIGHT)/min(-1,(verticalspeed))))+(abs(verticalspeed)/(availablethrust/mass))))).
     wait 0.
   }
 
   print "SLAM DONE".
   lock throttle to 0.
+  AG7 off. // gridfins
   set SLAM_MODE to false.
   lock steering to up.
 }
 
 function distanceToGround {
-  return AGL.
+  return altitude - body:geopositionOf(ship:position):terrainHeight - LAUNCH_AGL.
 }
 
 function stoppingDistance {
-  local grav is constant:g0. //
+  local grav is constant():g * (body:mass / body:radius^2).
   local maxDeceleration is (ship:availableThrust / ship:mass) - grav.
   return ship:verticalSpeed^2 / (2 * maxDeceleration).
 }
