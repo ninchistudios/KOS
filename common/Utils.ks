@@ -158,7 +158,9 @@ function ascentHeading {
 
 function ascentPitch {
   parameter vessel.
-  local tp is min(89.9,217.86 - 18.679 * ln(vessel:ALTITUDE)).
+  // local tp is min(89.9,217.86 - 18.679 * ln(vessel:ALTITUDE)).
+  // log fit({100,89.9},{150000,0.1}) on https://www.wolframalpha.com/input/
+  local tp is min(89.9,-12.2791 * ln(vessel:APOAPSIS * 0.000000661259)).
   print "PITCH:" + ROUND(tp,3) at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 1).
   return tp.
 }
@@ -179,7 +181,7 @@ function deployOrbitSafe {
 function doSafeStage {
   wait until STAGE:READY.
   print "# STAGING #".
-  STAGE.
+  // STAGE.
 }
 
 // have we experienced a drop in available thrust?
@@ -202,10 +204,15 @@ function stageNeeded {
 
 // T-minus countdown
 function doCountdown {
-  local parameter t.
+  local parameter t,i,Tmin.
   print "# T MINUS".
   from {local c is t.} until c = 0 step {set c to c - 1.} do {
     print "# ... " + c.
+    if (c = i) {
+      print "# IGNITION".
+      lock throttle to Tmin.
+      stage.
+    }
     WAIT 1.
   }
 }
