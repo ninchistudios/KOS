@@ -18,6 +18,7 @@ print " ".
 // ########## CONFIGURE LAUNCH #############
 local ATMO_BOUNDARY is 140000. // where does the atmo end
 local TGT_APO is 180000. // target orbit to be circularised
+local TGT_PERI is 170000. // target orbit to be circularised
 local TGT_ASC_ROLL is 270. // do a special ascent roll program stage
 local TGT_INCL is 118.5. // target orbital inclination, Canaveral lowest energy launch = 118
 local TCOUNT is 5. // T-Minus countdown
@@ -25,9 +26,11 @@ local IGNITE_TMINUS IS 3. // Pre-Ignites RealFuels Engines if > 0
 local LIMIT_Q is false. // limit Q to terminal velocity? CURRENTLY NONFUNCTIONAL
 local MAX_Q is 40. // If limiting Q, limit to what?
 local FULL_THROTT_OVER is 22000. // hacky way of limiting Q under this alt
-local EST_CIRC_DV is 4000. // estimated circularisation dV.
+local EST_CIRC_DV is 5000. // estimated circularisation dV.
 local STAGE_DISABLED is false. // disables all auto staging
 local DEPLOY_ORBIT_SAFE is true. // deploy orbit-safe modules when finalising plan?
+local MAX_CIRC_VV is 500. // once in circularisation, the max vertical velocity
+local LOGGING_ENABLED is false.
 // Stage List Parameters
 // a: KSP Stage No
 // b: Stage Type:
@@ -66,7 +69,13 @@ local LAUNCH_ALT is ROUND(MY_VESSEL:ALTITUDE,1). // alt of the control module
 lock MY_Q to MY_VESSEL:Q * constant:ATMtokPa. // dynamic pressure in kPa
 lock TOP_Q to topQ(MY_Q).
 local CURR_STAGE to -1.
-
+local PAST_APO to false.
+local START_TIME to TIME:SECONDS.
+local LOGGED_PITCH is 0.
+if archive:exists("TestFlight.csv") {
+  archive:delete("TestFlight.csv").
+}
+local LOGFILE to archive:create("TestFlight.csv").
 // RUN
 doSetup().
 doMain().
@@ -85,6 +94,7 @@ function doSetup {
     print "Automated Staging Enabled".
   }
   lock THROTTLE to 0.
+  switch to archive.
 }
 
 // loops while program executing
@@ -94,8 +104,24 @@ function doMain {
   doFlightTriggers().
 
   until not AUTOPILOT {
-    print "Q:" + ROUND(MY_Q,3) at (TERMINAL:WIDTH - 12,TERMINAL:HEIGHT - 2).
-    print "STAGE:" + CURR_STAGE + "  " at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 3).
+    print "    Q:" + ROUND(MY_Q,3) + "" at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 3).
+    print "STAGE:" + CURR_STAGE + "    " at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 4).
+    // LOGFILE.writeln(
+    if (LOGGING_ENABLED) {
+      if (CURR_STAGE >= 4) {
+        set LOGGED_PITCH to circPitch(MY_VESSEL,PAST_APO).
+      } else {
+        set LOGGED_PITCH to ascentPitch(MY_VESSEL).
+      }
+      log
+        (TIME:SECONDS - START_TIME)
+        + ","
+        + MY_VESSEL:ALTITUDE
+        + ","
+        + LOGGED_PITCH
+      to "TestFlight.csv".
+    }
+    WAIT 0.001.
   }
 
 }
@@ -112,12 +138,13 @@ function doFlightTriggers {
     set CURR_STAGE to CURR_STAGE + 1.
     lock THROTTLE to ascentThrottle(StageList[CURR_STAGE][3],StageList[CURR_STAGE][4],MAX_Q,MY_Q,LIMIT_Q).
     lock steering to LOOKDIRUP(MY_VESSEL:UP:FOREVECTOR, MY_VESSEL:FACING:TOPVECTOR).
-    print "# LAUNCH #".
+    print "# LAUNCH".
+    set START_TIME to TIME:SECONDS.
     doSafeStage().
 
     // cleared tower
     when MY_VESSEL:ALTITUDE > 2 * LAUNCH_ALT THEN {
-      print "# TOWER CLEAR #".
+      print "# TOWER CLEAR".
       print "# ATMO PENETRATION PHASE #".
       lock steering to heading(ascentHeading(TGT_INCL), ascentPitch(MY_VESSEL),TGT_ASC_ROLL).
 
@@ -126,77 +153,78 @@ function doFlightTriggers {
         print "# CLEAR AIR ASCENT PHASE #".
         lock THROTTLE to ascentThrottle(StageList[CURR_STAGE][3],1.0,MAX_Q,MY_Q,false).
 
+        // flatten the ascent
+        when MY_Q < 1 then {
+          print "# Q1 AT " + ROUND(MY_VESSEL:ALTITUDE / 1000,1) + " KM".
+          print "# CONTINUOUS CIRCULARISATION PHASE #".
+          initCircPID(TGT_APO).
+          lock steering to heading(ascentHeading(TGT_INCL), circPitch(MY_VESSEL,PAST_APO),TGT_ASC_ROLL).
+        }
+
         // pickle the boosters
         when simpleStageNeeded(MY_VESSEL) then {
           set CURR_STAGE to CURR_STAGE + 1.
-          print "# BOOSTER SEPARATION #".
+          print "# BOOSTER SEPARATION".
           doSafeStage().
 
           // pickle the atmo stage
           when simpleStageNeeded(MY_VESSEL) then {
             set CURR_STAGE to CURR_STAGE + 1.
-            print "# COLD STAGING ATMO STAGE #".
+            print "# COLD STAGING ATMO STAGE".
             doSafeStage().
             wait 3.
-            print "# UPPER STAGE IGNITION #".
+            set CURR_STAGE to CURR_STAGE + 1.
+            print "# UPPER STAGE IGNITION".
             doSafeStage().
+            doStageDelay(45).
+
+            when MY_VESSEL:ALTITUDE > TGT_APO then {
+              set PAST_APO to true.
+              print "# APOAPSIS - INVERTING PITCH GUIDANCE".
+            }
+
+            // pickle the upper stage
+            when simpleStageNeeded(MY_VESSEL) then {
+              set CURR_STAGE to CURR_STAGE + 1.
+              print "# COLD STAGING UPPER STAGE".
+              lock steering to PROGRADE.
+              RCS on.
+              doSafeStage().
+              wait 3.
+              set CURR_STAGE to CURR_STAGE + 1.
+              print "# INSERTION STAGE IGNITION".
+              doSafeStage().
+              wait 3.
+              lock steering to heading(ascentHeading(TGT_INCL), circPitch(MY_VESSEL,PAST_APO),TGT_ASC_ROLL).
+              doStageDelay(30).
+
+              // wait for circular condition and terminate
+              when MY_VESSEL:PERIAPSIS > TGT_PERI then {
+                lock throttle to 0.
+                print "# CIRCULARISED - INSERTION STAGE SHUTDOWN AT T+" + (TIME:SECONDS - START_TIME).
+                print "# APOAPSIS " + ROUND(MY_VESSEL:APOAPSIS / 1000,1) + " KM".
+                print "# PERIAPSIS " + ROUND(MY_VESSEL:PERIAPSIS / 1000,1) + " KM".
+                print "# INCLINATION " + ROUND(MY_VESSEL:ORBIT:INCLINATION,1) + " DEG".
+                set AUTOPILOT to false.
+              }
+            }
           }
         }
       }
     }
   }
 
-  // ensure that we pre-ignite stage
-
-  // stage the tower, ensure roll stays at current setting
-
-  // manage atmo ascent throttle and pitch
-
-  // stage the boosters
-
-  // pre-stage the upper atmo stage
-
-  // stage the upper atmo stage, full throttle
-
-  // keep APO at target, get above atmo (?) before MECO
-
-  // pre-stage circ stage
-
-  // build circ node and execute (handle being late)
-
-  // circ stage shutdown
-
-
   // ### REF CODE ###
   if (false) {
-    // go ballistic once apo is at target orbit
-    when MY_VESSEL:APOAPSIS >= TGT_APO then {
-      print "# BALLISTIC PHASE #".
-      lock THROTTLE to 0.
-      // wait until above atmo to circularise
-      when MY_VESSEL:ALTITUDE >= 140000 then {
-        print "# CIRCULARISING #".
-        doCircularization(MY_VESSEL, EST_CIRC_DV).
-        local validInput is false.
-        print "# ADD MNV to MATCH APO AND [G] TO GO".
-        until (validInput and HASNODE)  {
-          set ch to terminal:input:getchar().
-          if (ch = "G") set validInput to true.
-        }
-        executeManeuver(NEXTNODE, MY_VESSEL).
-        set STAGE_ARM to false.
-        set AUTOPILOT to false.
-      }
+    local validInput is false.
+    print "# ADD MNV to MATCH APO AND [G] TO GO".
+    until (validInput and HASNODE)  {
+      set ch to terminal:input:getchar().
+      if (ch = "G") set validInput to true.
     }
-
-    // steering profiles
-
-
-    // stage if needed throughout the program
-    when stageNeeded(MY_VESSEL,StageList,CURR_STAGE) then {
-      doSafeStage().
-      set CURR_STAGE to CURR_STAGE - 1.
-    }
+    executeManeuver(NEXTNODE, MY_VESSEL).
+    set STAGE_ARM to false.
+    set AUTOPILOT to false.
   }
 
 }
@@ -208,8 +236,8 @@ function doPreservedTriggers {
   when AG9 then {
     if hasnode {
       local n is nextnode.
-      print "BurnTime:" + ROUND(maneuverBurnTime(n, MY_VESSEL),1) at (TERMINAL:WIDTH - 19,TERMINAL:HEIGHT - 8).
-      print "BurnStart:" + ROUND(calculateStartTime(n, MY_VESSEL),1) at (TERMINAL:WIDTH - 20,TERMINAL:HEIGHT - 9).
+      print "BurnTime:" + ROUND(maneuverBurnTime(n, MY_VESSEL),1) at (TERMINAL:WIDTH - 19,TERMINAL:HEIGHT - 5).
+      print "BurnStart:" + ROUND(calculateStartTime(n, MY_VESSEL),1) at (TERMINAL:WIDTH - 20,TERMINAL:HEIGHT - 6).
     }
     AG9 off.
     return true.
@@ -217,12 +245,12 @@ function doPreservedTriggers {
 
   // deploy accel-safe modules outside the atmo
   when MY_VESSEL:ALTITUDE > ATMO_BOUNDARY THEN {
-    deployAccelSafe().
+    // deployAccelSafe().
   }
 
   // alert the highest Q
   when TOP_Q > MY_Q THEN {
-    print "# THROUGH MAX Q AT " + ROUND(TOP_Q,1) + " kPa #".
+    print "# THROUGH MAX Q " + ROUND(TOP_Q,1) + " KPA AT " + ROUND(MY_VESSEL:ALTITUDE / 1000,1) + " KM".
   }
 
 }
@@ -230,6 +258,9 @@ function doPreservedTriggers {
 // run last
 function doFinalise {
   lock THROTTLE to 0.
+  RCS on.
+  lock steering to PROGRADE.
+    wait 3.
   if (MY_VESSEL:PERIAPSIS > ATMO_BOUNDARY AND MY_VESSEL:APOAPSIS > ATMO_BOUNDARY AND DEPLOY_ORBIT_SAFE) {
     deployOrbitSafe().
   }

@@ -3,9 +3,15 @@
 local LAST_T is 0.
 local TICK is 0.
 local HIGHEST_Q is 0.
+local CIRC_PITCH is 5.
+local CPp is 0.03. // 0.04 works but a bit pitchy
+local CPi is 0.005.
+local CPd is 0.1.
+local CPPID is PIDLOOP(CPp,CPi,CPd,-0.1,0.1).
+local PRE_APO is true.
+local NO_STAGE_BEFORE is 0.
 
 function towerThrottle {
-  wait 0.001.
   return 1.
 }
 
@@ -16,7 +22,6 @@ function hoverSteering {
 // note this changes with fuel burn, so... TODO need to figure this out.
 function baseRadalt {
   parameter launchRadAlt.
-  // wait 0.001.
   return MAX(0.00001,((ALTITUDE-GEOPOSITION:TERRAINHEIGHT)-launchRadAlt)).
 }
 
@@ -49,15 +54,18 @@ function improve {
   parameter data.
   local scoreToBeat is score(data).
   local bestCandidate is data.
+  local tfactor is 10.
+  local ofactor is 1.
+  local dfactor is 100.
   local candidates is list(
-    list(data[0] + 1, data[1], data[2], data[3]),
-    list(data[0] - 1, data[1], data[2], data[3]),
-    list(data[0], data[1] + 1, data[2], data[3]),
-    list(data[0], data[1] - 1, data[2], data[3]),
-    list(data[0], data[1], data[2] + 1, data[3]),
-    list(data[0], data[1], data[2] - 1, data[3]),
-    list(data[0], data[1], data[2], data[3] + 1),
-    list(data[0], data[1], data[2], data[3] - 1)
+    list(data[0] + tfactor, data[1], data[2], data[3]),
+    list(data[0] - tfactor, data[1], data[2], data[3]),
+    list(data[0], data[1] + ofactor, data[2], data[3]),
+    list(data[0], data[1] - ofactor, data[2], data[3]),
+    list(data[0], data[1], data[2] + ofactor, data[3]),
+    list(data[0], data[1], data[2] - ofactor, data[3]),
+    list(data[0], data[1], data[2], data[3] + dfactor),
+    list(data[0], data[1], data[2], data[3] - dfactor)
   ).
   for candidate in candidates {
     local candidateScore is score(candidate).
@@ -83,12 +91,11 @@ function executeManeuver {
   // because this occurs in a preserved function, other preserved functions
   // (such as checking staging) seem to be suspended, so we need to specifically
   // check this one each tick
-  until isManeuverComplete(mnv) {
-    if stageNeeded(SHIP) {
-      doSafeStage().
-    }
-    wait 0.001.
-  }
+  // until isManeuverComplete(mnv) {
+    // if stageNeeded(SHIP) {
+    //   doSafeStage().
+  //   }
+  // }
   lock throttle to 0.
   unlock steering.
   removeManeuverFromFlightPlan(mnv).
@@ -153,7 +160,6 @@ function removeManeuverFromFlightPlan {
 function ascentThrottle {
   parameter Tmin, Tmax, qMax, iQ, limitQ.
   // print "THROTT:" + ROUND(THROTTLE,1) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 4).
-  WAIT 0.001.
   return Tmax.
 }
 
@@ -162,13 +168,32 @@ function ascentHeading {
   return tgt_incl.
 }
 
+// ascent on a logarithmic path
 function ascentPitch {
   parameter vessel.
   // local tp is min(89.9,217.86 - 18.679 * ln(vessel:ALTITUDE)).
   // log fit({100,89.9},{150000,0.1}) on https://www.wolframalpha.com/input/
   local tp is min(89.9,-12.2791 * ln(vessel:APOAPSIS * 0.000000661259)).
-  print "PITCH:" + ROUND(tp,3) at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 1).
+  print "APTCH:" + ROUND(tp,3) + "" at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 1).
   return tp.
+}
+
+function initCircPID {
+  parameter tgtAPO.
+  set CPPID:SETPOINT to tgtAPO.
+}
+
+// circularisation, adjusting pitch to keep APO at TGT_APO
+function circPitch {
+  parameter vessel,flip.
+  if (flip) {
+    // past APO, invert pitch
+    set CIRC_PITCH to max(-30,min(15,CIRC_PITCH - CPPID:UPDATE(TIME:seconds,vessel:APOAPSIS))).
+  } else {
+      set CIRC_PITCH to max(-30,min(15,CIRC_PITCH + CPPID:UPDATE(TIME:seconds,vessel:APOAPSIS))).
+  }
+  print "CPTCH:" + ROUND(CIRC_PITCH,3) + "" at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 2).
+  return CIRC_PITCH.
 }
 
 // vacuum accel-safe deployments (e.g. fairings) should be set to AG1
@@ -198,14 +223,24 @@ function topQ {
   return HIGHEST_Q.
 }
 
+// usually used to give ullage boosters a chance to burn out
+function doStageDelay {
+  parameter delay.
+  set NO_STAGE_BEFORE to TIME:SECONDS + delay.
+  set LAST_T to 0.
+}
+
 // have we experienced a drop in available thrust?
 function simpleStageNeeded {
   parameter vessel.
+  if TIME:SECONDS < NO_STAGE_BEFORE {
+    return false.
+  }
   local t is vessel:AVAILABLETHRUST.
   set TICK to TICK + 1.
-  print "Tick:" + TICK at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 7).
-  print "Last:" + ROUND(LAST_T,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 6).
-  print "Avail:" + ROUND(t,1) at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 5).
+  //print "Tick:" + TICK at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 7).
+  //print "Last:" + ROUND(LAST_T,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 6).
+  //print "Avail:" + ROUND(t,1) at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 5).
   if (t = 0 or t < (LAST_T - 10)) {
     // uh oh, loss of available thrust
     set LAST_T to t.
@@ -219,11 +254,12 @@ function simpleStageNeeded {
 // have we experienced a drop in available thrust?
 function stageNeeded {
   parameter vessel.
+
   local t is vessel:AVAILABLETHRUST.
   set TICK to TICK + 1.
-  print "Tick:" + TICK at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 7).
-  print "Last:" + ROUND(LAST_T,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 6).
-  print "Avail:" + ROUND(t,1) at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 5).
+  //print "Tick:" + TICK at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 7).
+  //print "Last:" + ROUND(LAST_T,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 6).
+  //print "Avail:" + ROUND(t,1) at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 5).
   if (t = 0 or t < (LAST_T - 10)) {
     // uh oh, loss of available thrust
     set LAST_T to t.
