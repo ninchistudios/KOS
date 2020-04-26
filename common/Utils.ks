@@ -2,6 +2,7 @@
 
 local LAST_T is 0.
 local TICK is 0.
+local HIGHEST_Q is 0.
 
 function towerThrottle {
   wait 0.001.
@@ -19,6 +20,7 @@ function baseRadalt {
   return MAX(0.00001,((ALTITUDE-GEOPOSITION:TERRAINHEIGHT)-launchRadAlt)).
 }
 
+// thanks CheersKevin
 function doCircularization {
   parameter vessel, est_dv.
   local circ is list(time:seconds + eta:APOAPSIS, 0, 0, est_dv).
@@ -32,6 +34,7 @@ function doCircularization {
   executeManeuver(circ, vessel).
 }
 
+// thanks CheersKevin
 function score {
   parameter data.
   local mnv is node(data[0], data[1], data[2], data[3]).
@@ -41,6 +44,7 @@ function score {
   return result.
 }
 
+// thanks CheersKevin
 function improve {
   parameter data.
   local scoreToBeat is score(data).
@@ -65,6 +69,7 @@ function improve {
   return bestCandidate.
 }
 
+// thanks CheersKevin
 function executeManeuver {
   parameter mList, vessel.
   local mnv is node(mList[0], mList[1], mList[2], mList[3]).
@@ -139,16 +144,17 @@ function removeManeuverFromFlightPlan {
   remove mnv.
 }
 
+// control the throttle to reduce Q if needed
+// param Tmin: min throttle
+// param Tmax: max throttle
+// param QMax: limit Q to this if poss
+// param iQ: current Q
+// param limitQ: should Q be limited
 function ascentThrottle {
-  // local thrott is THROTTLE + PID:UPDATE(TIME:SECONDS, MY_Q).
-  // if (thrott < 0) {
-    // set thrott to 0.
-  // } else if (thrott > 1) {
-    // set thrott to 1.
-  // }
+  parameter Tmin, Tmax, qMax, iQ, limitQ.
+  // print "THROTT:" + ROUND(THROTTLE,1) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 4).
   WAIT 0.001.
-  // return thrott.
-  return 1.
+  return Tmax.
 }
 
 function ascentHeading {
@@ -165,13 +171,13 @@ function ascentPitch {
   return tp.
 }
 
-// accel-safe deployments (e.g. fairings) should be set to AG1
+// vacuum accel-safe deployments (e.g. fairings) should be set to AG1
 function deployAccelSafe {
   AG1 ON.
   print "# ACCEL-SAFE MODULES DEPLOYED #".
 }
 
-// orbit-safe deployments (e.g. science) should be set to AG2
+// vacuum orbit-safe deployments (e.g. science) should be set to AG2
 function deployOrbitSafe {
   AG2 ON.
   print "# ORBIT-SAFE MODULES DEPLOYED #".
@@ -180,8 +186,34 @@ function deployOrbitSafe {
 // stage with a delay until ready
 function doSafeStage {
   wait until STAGE:READY.
-  print "# STAGING #".
-  // STAGE.
+  // print "# STAGING #".
+  STAGE.
+}
+
+function topQ {
+  parameter latestQ.
+  if latestQ > HIGHEST_Q {
+    set HIGHEST_Q to latestQ.
+  }
+  return HIGHEST_Q.
+}
+
+// have we experienced a drop in available thrust?
+function simpleStageNeeded {
+  parameter vessel.
+  local t is vessel:AVAILABLETHRUST.
+  set TICK to TICK + 1.
+  print "Tick:" + TICK at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 7).
+  print "Last:" + ROUND(LAST_T,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 6).
+  print "Avail:" + ROUND(t,1) at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 5).
+  if (t = 0 or t < (LAST_T - 10)) {
+    // uh oh, loss of available thrust
+    set LAST_T to t.
+    return true.
+  } else {
+    set LAST_T to t.
+    return false.
+  }
 }
 
 // have we experienced a drop in available thrust?
@@ -189,9 +221,9 @@ function stageNeeded {
   parameter vessel.
   local t is vessel:AVAILABLETHRUST.
   set TICK to TICK + 1.
-  print "Tick:" + TICK at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 5).
-  print "Last:" + ROUND(LAST_T,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 4).
-  print "Avail:" + ROUND(t,1) at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 3).
+  print "Tick:" + TICK at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 7).
+  print "Last:" + ROUND(LAST_T,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 6).
+  print "Avail:" + ROUND(t,1) at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 5).
   if (t = 0 or t < (LAST_T - 10)) {
     // uh oh, loss of available thrust
     set LAST_T to t.
@@ -203,6 +235,9 @@ function stageNeeded {
 }
 
 // T-minus countdown
+// param t - T-Minus count starts at t
+// param i - Ingition at T-Minus i
+// Tmin - min throttle at ignition
 function doCountdown {
   local parameter t,i,Tmin.
   print "# T MINUS".
@@ -211,7 +246,7 @@ function doCountdown {
     if (c = i) {
       print "# IGNITION".
       lock throttle to Tmin.
-      stage.
+      doSafeStage().
     }
     WAIT 1.
   }

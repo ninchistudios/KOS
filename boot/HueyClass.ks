@@ -25,7 +25,6 @@ if ch = "F" { // GO FLIGHT
   print "HUEY-22LE-001: [B]".
 
   copypath("0:/common/Utils.ks", "").
-  copypath("0:/fall/controllers/ascentController", "").
 
   set validInput to false.
   until validInput {
@@ -33,7 +32,7 @@ if ch = "F" { // GO FLIGHT
     if (ch = "A" or ch = "B") set validInput to true.
   }
 
-  if ch = "B" { // HUEY-1-LE
+  if ch = "B" { // HUEY-22LE-001
     copypath("0:/HueyClass/Huey-22LE-001.ks", "").
     runoncepath("Huey-22LE-001").
   }
