@@ -20,7 +20,7 @@ local ATMO_BOUNDARY is 140000. // where does the atmo end
 local TGT_APO is 180000. // target orbit to be circularised
 local TGT_PERI is 170000. // target orbit to be circularised
 local TGT_ASC_ROLL is 270. // do a special ascent roll program stage
-local TGT_INCL is 118.5. // target orbital inclination, Canaveral lowest energy launch = 118
+local TGT_INCL is 118.5. // target orbital inclination, Canaveral lowest energy launch = 118.5
 local TCOUNT is 5. // T-Minus countdown
 local IGNITE_TMINUS IS 3. // Pre-Ignites RealFuels Engines if > 0
 local LIMIT_Q is false. // limit Q to terminal velocity? CURRENTLY NONFUNCTIONAL
@@ -30,7 +30,7 @@ local EST_CIRC_DV is 5000. // estimated circularisation dV.
 local STAGE_DISABLED is false. // disables all auto staging
 local DEPLOY_ORBIT_SAFE is true. // deploy orbit-safe modules when finalising plan?
 local MAX_CIRC_VV is 500. // once in circularisation, the max vertical velocity
-local LOGGING_ENABLED is false.
+local LOGGING_ENABLED is true.
 // Stage List Parameters
 // a: KSP Stage No
 // b: Stage Type:
@@ -72,6 +72,7 @@ local CURR_STAGE to -1.
 local PAST_APO to false.
 local START_TIME to TIME:SECONDS.
 local LOGGED_PITCH is 0.
+local NEXT_LOG_TIME is TIME:SECONDS + 1.
 if archive:exists("TestFlight.csv") {
   archive:delete("TestFlight.csv").
 }
@@ -93,8 +94,13 @@ function doSetup {
   } else {
     print "Automated Staging Enabled".
   }
+  print "Logging telemetry: " + LOGGING_ENABLED.
   lock THROTTLE to 0.
   switch to archive.
+  if (LOGGING_ENABLED) {
+    log logpid() + ",,,,," to "TestFlight.csv".
+    log "MET,ALT,PITCH,Q,APO,PERI,TGTAPO,TGTPERI" to "TestFlight.csv".
+  }
 }
 
 // loops while program executing
@@ -104,26 +110,39 @@ function doMain {
   doFlightTriggers().
 
   until not AUTOPILOT {
-    print "    Q:" + ROUND(MY_Q,3) + "" at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 3).
-    print "STAGE:" + CURR_STAGE + "    " at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 4).
-    // LOGFILE.writeln(
+    print "    Q:" + ROUND(MY_Q,1) + "  " at (TERMINAL:WIDTH - 16,0).
+    print "STAGE:" + CURR_STAGE + "     " at (TERMINAL:WIDTH - 16,1).
+    print "  TTA:" + ROUND(ETA:APOAPSIS,0) + "   " at (TERMINAL:WIDTH - 16,2).
+    print "  TTP:" + ROUND(ETA:PERIAPSIS,0) + "   " at (TERMINAL:WIDTH - 16,3).
     if (LOGGING_ENABLED) {
-      if (CURR_STAGE >= 4) {
-        set LOGGED_PITCH to circPitch(MY_VESSEL,PAST_APO).
-      } else {
-        set LOGGED_PITCH to ascentPitch(MY_VESSEL).
+      if TIME:SECONDS >= NEXT_LOG_TIME {
+        set NEXT_LOG_TIME to NEXT_LOG_TIME + 1.
+        if (CURR_STAGE >= 4) {
+          set LOGGED_PITCH to circPitch(MY_VESSEL,PAST_APO).
+        } else {
+          set LOGGED_PITCH to ascentPitch(MY_VESSEL).
+        }
+        log
+          (TIME:SECONDS - START_TIME)
+          + ","
+          + MY_VESSEL:ALTITUDE
+          + ","
+          + LOGGED_PITCH
+          + ","
+          + MY_Q
+          + ","
+          + MY_VESSEL:APOAPSIS
+          + ","
+          + MY_VESSEL:PERIAPSIS
+          + ","
+          + TGT_APO
+          + ","
+          + TGT_PERI
+        to "TestFlight.csv".
       }
-      log
-        (TIME:SECONDS - START_TIME)
-        + ","
-        + MY_VESSEL:ALTITUDE
-        + ","
-        + LOGGED_PITCH
-      to "TestFlight.csv".
     }
-    WAIT 0.001.
+    WAIT 0.
   }
-
 }
 
 // this is the main sequence of the flight plan
@@ -178,7 +197,7 @@ function doFlightTriggers {
             doSafeStage().
             doStageDelay(45).
 
-            when MY_VESSEL:ALTITUDE > TGT_APO then {
+            when (MY_VESSEL:ALTITUDE > TGT_APO OR ETA:APOAPSIS > ETA:PERIAPSIS) then {
               set PAST_APO to true.
               print "# APOAPSIS - INVERTING PITCH GUIDANCE".
             }
@@ -195,16 +214,17 @@ function doFlightTriggers {
               print "# INSERTION STAGE IGNITION".
               doSafeStage().
               wait 3.
+              RCS off.
               lock steering to heading(ascentHeading(TGT_INCL), circPitch(MY_VESSEL,PAST_APO),TGT_ASC_ROLL).
               doStageDelay(30).
 
               // wait for circular condition and terminate
               when MY_VESSEL:PERIAPSIS > TGT_PERI then {
                 lock throttle to 0.
-                print "# CIRCULARISED - INSERTION STAGE SHUTDOWN AT T+" + (TIME:SECONDS - START_TIME).
+                print "# CIRCULARISED - INSERTION STAGE SHUTDOWN AT T+" + ROUND((TIME:SECONDS - START_TIME),0).
                 print "# APOAPSIS " + ROUND(MY_VESSEL:APOAPSIS / 1000,1) + " KM".
                 print "# PERIAPSIS " + ROUND(MY_VESSEL:PERIAPSIS / 1000,1) + " KM".
-                print "# INCLINATION " + ROUND(MY_VESSEL:ORBIT:INCLINATION,1) + " DEG".
+                print "# INCLINATION " + ROUND(MY_VESSEL:ORBIT:INCLINATION + 90,1) + " DEG".
                 set AUTOPILOT to false.
               }
             }
@@ -236,8 +256,8 @@ function doPreservedTriggers {
   when AG9 then {
     if hasnode {
       local n is nextnode.
-      print "BurnTime:" + ROUND(maneuverBurnTime(n, MY_VESSEL),1) at (TERMINAL:WIDTH - 19,TERMINAL:HEIGHT - 5).
-      print "BurnStart:" + ROUND(calculateStartTime(n, MY_VESSEL),1) at (TERMINAL:WIDTH - 20,TERMINAL:HEIGHT - 6).
+      //print "BurnTime:" + ROUND(maneuverBurnTime(n, MY_VESSEL),1) at (TERMINAL:WIDTH - 19,TERMINAL:HEIGHT - 7).
+    //  print "BurnStart:" + ROUND(calculateStartTime(n, MY_VESSEL),1) at (TERMINAL:WIDTH - 20,TERMINAL:HEIGHT - 8).
     }
     AG9 off.
     return true.
@@ -252,6 +272,10 @@ function doPreservedTriggers {
   when TOP_Q > MY_Q THEN {
     print "# THROUGH MAX Q " + ROUND(TOP_Q,1) + " KPA AT " + ROUND(MY_VESSEL:ALTITUDE / 1000,1) + " KM".
   }
+
+}
+
+function doTelemetry {
 
 }
 

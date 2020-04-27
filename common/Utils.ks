@@ -4,12 +4,18 @@ local LAST_T is 0.
 local TICK is 0.
 local HIGHEST_Q is 0.
 local CIRC_PITCH is 5.
-local CPp is 0.03. // 0.04 works but a bit pitchy
+local CPp is 0.05.
 local CPi is 0.005.
-local CPd is 0.1.
+local CPd is 0.2.
 local CPPID is PIDLOOP(CPp,CPi,CPd,-0.1,0.1).
 local PRE_APO is true.
 local NO_STAGE_BEFORE is 0.
+local CLAMP_POS_PITCH is 30.
+local CLAMP_NEG_PITCH is -30.
+
+function logpid {
+  return "P:" + CPp + " I:" + CPi + " D:" + CPd + " +C:" + CLAMP_POS_PITCH + " -C:" + CLAMP_NEG_PITCH.
+}
 
 function towerThrottle {
   return 1.
@@ -174,7 +180,7 @@ function ascentPitch {
   // local tp is min(89.9,217.86 - 18.679 * ln(vessel:ALTITUDE)).
   // log fit({100,89.9},{150000,0.1}) on https://www.wolframalpha.com/input/
   local tp is min(89.9,-12.2791 * ln(vessel:APOAPSIS * 0.000000661259)).
-  print "APTCH:" + ROUND(tp,3) + "" at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 1).
+  print "APTCH:" + ROUND(tp,1) + "  " at (TERMINAL:WIDTH - 16,4).
   return tp.
 }
 
@@ -188,11 +194,11 @@ function circPitch {
   parameter vessel,flip.
   if (flip) {
     // past APO, invert pitch
-    set CIRC_PITCH to max(-30,min(15,CIRC_PITCH - CPPID:UPDATE(TIME:seconds,vessel:APOAPSIS))).
+    set CIRC_PITCH to max(CLAMP_NEG_PITCH,min(CLAMP_POS_PITCH,CIRC_PITCH - CPPID:UPDATE(TIME:seconds,vessel:APOAPSIS))).
   } else {
-      set CIRC_PITCH to max(-30,min(15,CIRC_PITCH + CPPID:UPDATE(TIME:seconds,vessel:APOAPSIS))).
+      set CIRC_PITCH to max(CLAMP_NEG_PITCH,min(CLAMP_POS_PITCH,CIRC_PITCH + CPPID:UPDATE(TIME:seconds,vessel:APOAPSIS))).
   }
-  print "CPTCH:" + ROUND(CIRC_PITCH,3) + "" at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 2).
+  print "CPTCH:" + ROUND(CIRC_PITCH,1) + "  " at (TERMINAL:WIDTH - 16,5).
   return CIRC_PITCH.
 }
 
