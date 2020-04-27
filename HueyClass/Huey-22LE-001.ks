@@ -146,6 +146,11 @@ function doFlightTriggers {
       print "# ATMO PENETRATION PHASE #".
       lock steering to heading(ascentHeading(TGT_INCL), ascentPitch(MY_VESSEL),TGT_ASC_ROLL).
 
+      // alert the highest Q
+      when TOP_Q > (MY_Q + 1) THEN {
+        print "# THROUGH MAX Q " + ROUND(TOP_Q,1) + " KPA AT " + ROUND(MY_VESSEL:ALTITUDE / 1000,1) + " KM".
+      }
+
       // through the soup, go full burn
       when MY_VESSEL:ALTITUDE > FULL_THROTT_OVER then {
         print "# CLEAR AIR ASCENT PHASE #".
@@ -249,11 +254,6 @@ function doPreservedTriggers {
   // deploy accel-safe modules outside the atmo
   when MY_VESSEL:ALTITUDE > ATMO_BOUNDARY THEN {
     // deployAccelSafe().
-  }
-
-  // alert the highest Q
-  when TOP_Q > MY_Q THEN {
-    print "# THROUGH MAX Q " + ROUND(TOP_Q,1) + " KPA AT " + ROUND(MY_VESSEL:ALTITUDE / 1000,1) + " KM".
   }
 
 }
