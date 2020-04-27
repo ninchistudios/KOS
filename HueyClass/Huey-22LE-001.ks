@@ -4,10 +4,10 @@
 runoncepath("Utils").
 
 print " ".
-print "#################################".
-print "# HUEY-22-LE-001 FLIGHT PROGRAM #".
-print "# 22T TEST MASS LEO INSERTION   #".
-print "#################################".
+print "################################".
+print "# HUEY-22LE-001 FLIGHT PROGRAM #".
+print "# 22T TEST MASS LEO INSERTION  #".
+print "################################".
 print " ".
 
 // AG settings:
@@ -17,7 +17,7 @@ print " ".
 
 // ########## CONFIGURE LAUNCH #############
 local ATMO_BOUNDARY is 140000. // where does the atmo end
-local TGT_APO is 180000. // target orbit to be circularised
+local TGT_APO is 200000. // target orbit to be circularised
 local TGT_PERI is 170000. // target orbit to be circularised
 local TGT_ASC_ROLL is 270. // do a special ascent roll program stage
 local TGT_INCL is 118.5. // target orbital inclination, Canaveral lowest energy launch = 118.5
@@ -117,28 +117,7 @@ function doMain {
     if (LOGGING_ENABLED) {
       if TIME:SECONDS >= NEXT_LOG_TIME {
         set NEXT_LOG_TIME to NEXT_LOG_TIME + 1.
-        if (CURR_STAGE >= 4) {
-          set LOGGED_PITCH to circPitch(MY_VESSEL,PAST_APO).
-        } else {
-          set LOGGED_PITCH to ascentPitch(MY_VESSEL).
-        }
-        log
-          (TIME:SECONDS - START_TIME)
-          + ","
-          + MY_VESSEL:ALTITUDE
-          + ","
-          + LOGGED_PITCH
-          + ","
-          + MY_Q
-          + ","
-          + MY_VESSEL:APOAPSIS
-          + ","
-          + MY_VESSEL:PERIAPSIS
-          + ","
-          + TGT_APO
-          + ","
-          + TGT_PERI
-        to "TestFlight.csv".
+        doTelemetry().
       }
     }
     WAIT 0.
@@ -225,6 +204,10 @@ function doFlightTriggers {
                 print "# APOAPSIS " + ROUND(MY_VESSEL:APOAPSIS / 1000,1) + " KM".
                 print "# PERIAPSIS " + ROUND(MY_VESSEL:PERIAPSIS / 1000,1) + " KM".
                 print "# INCLINATION " + ROUND(MY_VESSEL:ORBIT:INCLINATION + 90,1) + " DEG".
+                // final data point
+                if (LOGGING_ENABLED) {
+                  doTelemetry().
+                }
                 set AUTOPILOT to false.
               }
             }
@@ -276,7 +259,28 @@ function doPreservedTriggers {
 }
 
 function doTelemetry {
-
+  if (CURR_STAGE >= 4) {
+    set LOGGED_PITCH to circPitch(MY_VESSEL,PAST_APO).
+  } else {
+    set LOGGED_PITCH to ascentPitch(MY_VESSEL).
+  }
+  log
+    (TIME:SECONDS - START_TIME)
+    + ","
+    + MY_VESSEL:ALTITUDE
+    + ","
+    + LOGGED_PITCH
+    + ","
+    + MY_Q
+    + ","
+    + MY_VESSEL:APOAPSIS
+    + ","
+    + MY_VESSEL:PERIAPSIS
+    + ","
+    + TGT_APO
+    + ","
+    + TGT_PERI
+  to "TestFlight.csv".
 }
 
 // run last

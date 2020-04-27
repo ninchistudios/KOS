@@ -4,13 +4,13 @@ local LAST_T is 0.
 local TICK is 0.
 local HIGHEST_Q is 0.
 local CIRC_PITCH is 5.
-local CPp is 0.05.
-local CPi is 0.005.
-local CPd is 0.2.
+local CPp is 0.04.
+local CPi is 0.01.
+local CPd is 0.15.
 local CPPID is PIDLOOP(CPp,CPi,CPd,-0.1,0.1).
 local PRE_APO is true.
 local NO_STAGE_BEFORE is 0.
-local CLAMP_POS_PITCH is 30.
+local CLAMP_POS_PITCH is 15.
 local CLAMP_NEG_PITCH is -30.
 
 function logpid {
