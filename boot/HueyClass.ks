@@ -22,7 +22,7 @@ if ch = "F" { // GO FLIGHT
   // ## CONFIGURE MISSION ##
   print "# GO FLIGHT - CONFIRM MISSION CONFIG #".
   print "Abort: [A]".
-  print "HUEY-22LE-002: [B]".
+  print "HUEY-22LE-003: [B]".
 
   copypath("0:/common/Utils.ks", "").
 
@@ -33,8 +33,8 @@ if ch = "F" { // GO FLIGHT
   }
 
   if ch = "B" { // HUEY-22LE-001
-    copypath("0:/HueyClass/Huey-22LE-002.ks", "").
-    runoncepath("Huey-22LE-002").
+    copypath("0:/HueyClass/Huey-22LE-003.ks", "").
+    runoncepath("Huey-22LE-003").
   }
 
   // ## END CONFIGURE MISSION ##
