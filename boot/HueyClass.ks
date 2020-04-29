@@ -23,18 +23,24 @@ if ch = "F" { // GO FLIGHT
   print "# GO FLIGHT - CONFIRM MISSION CONFIG #".
   print "Abort: [A]".
   print "HUEY-22LE-003: [B]".
+  print "HUEY-22LE-004: [C]".
 
   copypath("0:/common/Utils.ks", "").
 
   set validInput to false.
   until validInput {
     set ch to terminal:input:getchar().
-    if (ch = "A" or ch = "B") set validInput to true.
+    if (ch = "A" or ch = "B" or ch = "C") set validInput to true.
   }
 
-  if ch = "B" { // HUEY-22LE-001
+  if ch = "B" {
     copypath("0:/HueyClass/Huey-22LE-003.ks", "").
     runoncepath("Huey-22LE-003").
+  }
+
+  if ch = "C" {
+    copypath("0:/HueyClass/Huey-22LE-004.ks", "").
+    runoncepath("Huey-22LE-004").
   }
 
   // ## END CONFIGURE MISSION ##
