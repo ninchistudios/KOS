@@ -29,77 +29,35 @@ print "#####################################".
 print " ".
 
 // CONFIGURE FLIGHT
+local DO_WARP is false. // set true to physics warp through boring bits
 local TCOUNT is 3. // T-Minus countdown
 local TIGNITE is 1. // Ignite at T-Minus...
+local Tmin is 0.1. // minimum throttle setting
+local BOOST_APO is 12000. // after hover, how high should we boost
+local HAGL is 150. // TARGET HOVER ALT METERS AGL
+local GAGL is 500. // engage gear below on descent
+local HOW_SUICIDAL is 0.9. // how late do you want to leave the burn? Close to but < 1.0
+// END CONFIGURE FLIGHT
+
+// CONSTANTS, TUNING AND GLOBALS
+local AGL_TWEAK is 3. // hoverslam AGL tweak
 local HTp is 0.05. // Hover Throttle P
 local HTi is 0.1. // Hover Throttle I
 local HTd is 0.15. // Hover Throttle D
 local HTPID is PIDLOOP(HTp,HTi,HTd,-.1,.05). // adjust last two values for throttle speed
-local Tmin is 0.1. // minimum throttle setting
 local AUTOPILOT is true. // program will run until this is switched off
-local HOVER_MODE is false. // flag for the main loop
-local ASCENT_MODE is false. // flag for entering post-hover ascent mode
-local SLAM_MODE is false. // time to do a hoverslam
 local LAUNCH_AMSL is ROUND(ship:ALTITUDE,3). // AMSL of the control module
 local LAUNCH_AGL is ROUND(MAX(0.001,(ALTITUDE-GEOPOSITION:TERRAINHEIGHT)),3). // AGL of the control module
-local BOOST_APO is 5000.
-local HAGL is 250. // TARGET HOVER ALT METERS AGL
 local PREDICTED is 0. // predicted radalt with current accel + vel
-local GAGL is 500. // engage gear below on descent
 local vAngle is 0. // angle from ship up to surface up
 local Fg is 0. // force of gravity on the ship
 local AGL is 0. // current AGL of the nozzles
-local tweak is 3. // hoverslam AGL tweak
 local SLAM_THROTT is 0. // required throttle to slam
-neutraliseRoll().
-set kuniverse:TimeWarp:MODE to "PHYSICS".
 
 // RUN
 doSetup().
 doMain().
 doFinalise().
-
-// runs once
-function doSetup {
-  set HTPID:SETPOINT TO HAGL.
-  // surface key flight data
-  print "Target Hover: " + HAGL + "m AGL".
-  print "Launch AMSL: " + LAUNCH_AMSL + "m".
-  print "Launch AGL: " + LAUNCH_AGL + "m".
-  lock vAngle to VANG(ship:facing:forevector, ship:up:forevector).
-  lock Fg to (body:mu / body:radius^2) * mass.
-  lock AGL to baseRadalt(LAUNCH_AGL).
-  lock SLAM_THROTT to min (1, stoppingDistance() / distanceToGround()).
-  if ADDONS:TR:AVAILABLE {
-      PRINT "Trajectories available.".
-  } else {
-      PRINT "ERROR: Trajectories is not available.".
-  }
-  doCountdown(TCOUNT, TIGNITE, Tmin).
-}
-
-// loops while inflight
-function doMain {
-
-  doPreservedTriggers().
-  doFlightTriggers().
-
-  until not AUTOPILOT {
-    doDebug().
-  }
-
-}
-
-// run last
-function doFinalise {
-  lock THROTTLE to 0.
-  // TODO clear flightplan
-  // set ship:control:neutralize to true.
-  print "### PROGRAM COMPLETE ###".
-  until false {
-    wait 1.
-  }
-}
 
 // the main sequence of the flight plan
 function doFlightTriggers {
@@ -116,24 +74,21 @@ function doFlightTriggers {
 
     // when AGL > LAUNCH_AGL THEN {
     when true THEN {
-      set warp to 3.
+      if DO_WARP { set warp to 3. }
       // cleared tower
       print "# HOVER PHASE #".
       lock steering to up. // hoverSteering().
       lock throttle to hoverThrottle().
-      set HOVER_MODE to true.
 
       // reduce to 3 engines when hovering on 1/3 throttle
-      when (hoverThrottle() < 0.31) then {
-        toggle AG1.
+      when (hoverThrottle() < 0.33) then {
+        toggle AG1. // drop to 3 engines
 
         // fuel load burned, boost alt
         when (ship:mass < (2 * ship:drymass)) then {
           print "# ASCENT PHASE #".
-          set warp to 0.
+          if DO_WARP { set warp to 0. }
           wait 2.
-          set HOVER_MODE to false.
-          set ASCENT_MODE to true.
           lock steering to heading(90, 88).
           lock throttle to 1.
 
@@ -141,7 +96,6 @@ function doFlightTriggers {
           when (ship:APOAPSIS > BOOST_APO) then {
             // hoverslam
             print "# BALLISTIC PHASE #".
-            set ASCENT_MODE to false.
             lock throttle to 0.
 
             // descending at top of boost
@@ -150,11 +104,10 @@ function doFlightTriggers {
               lock steering to srfRetrograde.
               rcs on.
               AG7 on. // gridfins
-              set SLAM_MODE to true.
 
               // throttle up
               print "# HOVERSLAM PHASE #".
-              when (SLAM_THROTT > 0.8) then {
+              when (SLAM_THROTT > HOW_SUICIDAL) then {
                 print "# BURN #".
                 lock throttle to SLAM_THROTT.
 
@@ -166,10 +119,7 @@ function doFlightTriggers {
                      print "# SLAM DONE #".
                      lock throttle to 0.
                      AG7 off. // gridfins
-                     set SLAM_MODE to false.
                      lock steering to up.
-                     wait 5.
-                     rcs off.
                      set AUTOPILOT to false.
                    }
                 }
@@ -184,6 +134,63 @@ function doFlightTriggers {
 
 function doPreservedTriggers {
 
+}
+
+function doDebug {
+  // print "X Accel:" + ROUND(ship:sensors:acc:x,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 6).
+  // print "Y Accel:" + ROUND(ship:sensors:acc:y,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 5).
+  // print "Z Accel:" + ROUND(ship:sensors:acc:z,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 4).
+  print "WetMass:" + ROUND(ship:wetmass,1) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 9).
+  print "DryMass:" + ROUND(ship:drymass,1) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 8).
+  print "Mass:" + ROUND(ship:mass,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 7).
+  print "Vv:" + ROUND(ship:verticalspeed,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 6).
+  print "vAngle:" + ROUND(vAngle,3) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 5).
+  print "Fg:" + ROUND(Fg,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 4).
+  print "AGL:" + ROUND(AGL, 1) at (TERMINAL:WIDTH - 14,TERMINAL:HEIGHT - 3).
+  print "AMSL:" + ROUND(ship:ALTITUDE - LAUNCH_AGL,3) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 2).
+  print "SlamPCT:" + ROUND(SLAM_THROTT, 3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 1).
+}
+
+// loops while inflight
+function doMain {
+  doPreservedTriggers().
+  doFlightTriggers().
+  until not AUTOPILOT {
+    doDebug().
+  }
+}
+
+// runs once
+function doSetup {
+  neutraliseRoll().
+  set kuniverse:TimeWarp:MODE to "PHYSICS".
+  set HTPID:SETPOINT TO HAGL.
+  // surface key flight data
+  print "Launch AMSL: " + LAUNCH_AMSL + "m".
+  print "Launch AGL: " + LAUNCH_AGL + "m".
+  print "Target Hover: " + HAGL + "m AGL".
+  print "Target Boost Apo: " + BOOST_APO + "m".
+  if ADDONS:TR:AVAILABLE {
+      PRINT "Trajectories available - OK".
+  } else {
+      PRINT "ERROR: Trajectories is not available.".
+  }
+  lock vAngle to VANG(ship:facing:forevector, ship:up:forevector).
+  lock Fg to (body:mu / body:radius^2) * mass.
+  lock AGL to baseRadalt(LAUNCH_AGL).
+  lock SLAM_THROTT to min (1, stoppingDistance() / distanceToGround()).
+  doCountdown(TCOUNT, TIGNITE, Tmin).
+}
+
+// run last
+function doFinalise {
+  lock THROTTLE to 0.
+  // TODO clear flightplan
+  // set ship:control:neutralize to true.
+  print "### PROGRAM COMPLETE ###".
+  until false {
+    wait 1.
+  }
 }
 
 function hoverThrottle {
@@ -230,7 +237,7 @@ function doHoverslam {
 }
 
 function distanceToGround {
-  return altitude - body:geopositionOf(ship:position):terrainHeight - LAUNCH_AGL - tweak.
+  return altitude - body:geopositionOf(ship:position):terrainHeight - LAUNCH_AGL - AGL_TWEAK.
 }
 
 function stoppingDistance {
@@ -260,23 +267,4 @@ function predictedRadalt {
 function neutraliseRoll {
   SET STEERINGMANAGER:ROLLPID:KP TO 0. // set roll rate to 0.
   SET STEERINGMANAGER:ROLLPID:KI TO 0. // set roll rate to 0.
-}
-
-function boostThrottle {
-  return hoverThrottle * 2.
-}
-
-function doDebug {
-  // print "X Accel:" + ROUND(ship:sensors:acc:x,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 6).
-  // print "Y Accel:" + ROUND(ship:sensors:acc:y,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 5).
-  // print "Z Accel:" + ROUND(ship:sensors:acc:z,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 4).
-  print "WetMass:" + ROUND(ship:wetmass,1) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 9).
-  print "DryMass:" + ROUND(ship:drymass,1) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 8).
-  print "Mass:" + ROUND(ship:mass,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 7).
-  print "Vv:" + ROUND(ship:verticalspeed,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 6).
-  print "vAngle:" + ROUND(vAngle,3) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 5).
-  print "Fg:" + ROUND(Fg,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 4).
-  print "AGL:" + ROUND(AGL, 1) at (TERMINAL:WIDTH - 14,TERMINAL:HEIGHT - 3).
-  print "AMSL:" + ROUND(ship:ALTITUDE - LAUNCH_AGL,3) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 2).
-  print "SlamPCT:" + ROUND(SLAM_THROTT, 3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 1).
 }
