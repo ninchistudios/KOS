@@ -3,9 +3,12 @@
 // KSC LZ2: Lat -000.032570 Long -074.642213 0 AGL 67m AMSL
 // KSC FIWLT: Lat -000.149711 Long -074.013484 AGL 741.7 AMSL 0
 
-// F9 AGs:
-// AG1: Engine mode (9/3/1)
-// AG7: Grid Fins
+// Standard AGs:
+// AG1: Engine mode (F9 9/3/1)
+// AG6: PV Panels
+// AG7: Grid Fins toggle
+// AG8: Vacuum Accel-safe Modules (e.g. fairings) - safe to do a burn after deployed
+// AG9: Vacuum Accel-risk Modules (e.g. big antennas) - only deployed when there are no more burns
 
 // launch
 // ascend to 250m
@@ -46,7 +49,7 @@ local GAGL is 500. // engage gear below on descent
 local vAngle is 0. // angle from ship up to surface up
 local Fg is 0. // force of gravity on the ship
 local AGL is 0. // current AGL of the nozzles
-local tweak is 4. // hoverslam AGL tweak
+local tweak is 3. // hoverslam AGL tweak
 local SLAM_THROTT is 0. // required throttle to slam
 neutraliseRoll().
 set kuniverse:TimeWarp:MODE to "PHYSICS".
@@ -83,15 +86,6 @@ function doMain {
 
   until not AUTOPILOT {
     doDebug().
-    if (HOVER_MODE) {
-      // maintains throttle locked to hover
-    }
-    if (ASCENT_MODE) {
-      // gently ascend to a nice height for hoverslam
-    }
-    if (SLAM_MODE) {
-
-    }
   }
 
 }
@@ -101,7 +95,7 @@ function doFinalise {
   lock THROTTLE to 0.
   // TODO clear flightplan
   // set ship:control:neutralize to true.
-  // print "### PROGRAM COMPLETE ###".
+  print "### PROGRAM COMPLETE ###".
   until false {
     wait 1.
   }
@@ -169,13 +163,14 @@ function doFlightTriggers {
                    gear on.
 
                    when (ship:status = "LANDED") then {
-                     print "SLAM DONE".
+                     print "# SLAM DONE #".
                      lock throttle to 0.
                      AG7 off. // gridfins
                      set SLAM_MODE to false.
                      lock steering to up.
                      wait 5.
                      rcs off.
+                     set AUTOPILOT to false.
                    }
                 }
               }

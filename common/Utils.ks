@@ -204,13 +204,13 @@ function circPitch {
 
 // vacuum accel-safe deployments (e.g. fairings) should be set to AG1
 function deployAccelSafe {
-  AG1 ON.
+  AG8 ON.
   print "# ACCEL-SAFE MODULES DEPLOYED #".
 }
 
 // vacuum orbit-safe deployments (e.g. science) should be set to AG2
 function deployOrbitSafe {
-  AG2 ON.
+  AG9 ON.
   print "# ORBIT-SAFE MODULES DEPLOYED #".
 }
 
