@@ -3,9 +3,9 @@ set terminal:width to 60.
 set terminal:height to 40.
 CLEARSCREEN.
 
-print "#############################".
-print "# KERPERIUM SSSH BOOTLOADER #".
-print "#############################".
+print "#######################################".
+print "# KERPERIUM F9 SIDE CORE B BOOTLOADER #".
+print "#######################################".
 print " ".
 print "Go Flight: [F]".
 print "Abort: [A]".
