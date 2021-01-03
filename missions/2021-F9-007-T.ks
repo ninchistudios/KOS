@@ -23,19 +23,20 @@ print "# - perform hoverslam at semi-random location            #".
 print "##########################################################".
 print " ".
 // CONFIGURE FLIGHT
-local DO_WARP is false. // set true to physics warp through boring bits
+local DO_WARP is true. // set true to physics warp through boring bits
+local WARP_SPEED is 2. // 1/2/3 corresponding to a 2x / 3x / 4x physics warp
 local TCOUNT is 5. // T-Minus countdown
 local TGANTRY is 3. // Gantry at T-Minus...
 local TIGNITE is 1. // Ignite at T-Minus...
 local Tmin is 0.1. // minimum throttle setting
 local BOOST_APO is 12000. // after hover, how high should we boost
-local HAGL is 150. // TARGET HOVER ALT METERS AGL
+local HAGL is 500. // TARGET HOVER ALT METERS AGL
 local GAGL is 500. // engage gear below on descent
 local HOW_SUICIDAL is 0.9. // how late do you want to leave the burn? Close to but < 1.0 for max efficiency
 // END CONFIGURE FLIGHT
 
 // CONSTANTS, TUNING AND GLOBALS
-local AGL_TWEAK is 3. // hoverslam AGL tweak
+local AGL_TWEAK is 3. // hoverslam AGL tweak - a little extra height to account for struts etc
 local HTp is 0.05. // Hover Throttle P
 local HTi is 0.1. // Hover Throttle I
 local HTd is 0.15. // Hover Throttle D
@@ -47,7 +48,7 @@ local PREDICTED is 0. // predicted radalt with current accel + vel
 local vAngle is 0. // angle from ship up to surface up
 local Fg is 0. // force of gravity on the ship
 local AGL is 0. // current AGL of the nozzles
-local SLAM_THROTT is 0. // required throttle to slam
+local SLAM_THROTT is 0. // required throttle to safely slam
 
 // RUN
 doSetup().
@@ -58,70 +59,45 @@ doFinalise().
 function doFlightTriggers {
 
   when true THEN {
-    // Tower Phase
     print "### TOWER PHASE ###".
-    print "# Target Hover: " + HAGL + "m AGL".
-    print "# Target Boost Apo: " + BOOST_APO + "m".
-    doCountdown(TCOUNT, TIGNITE, Tmin, TGANTRY).
-    lock throttle to towerThrottle().
-    print "# LIFTOFF".
-    lock steering to up. // up
-    wait 1.
-    rcs off.
+    doTowerPhase().
 
-    // when AGL > LAUNCH_AGL THEN {
-    when true THEN {
+    // clear of the tower
+    when AGL > (2 * LAUNCH_AGL) THEN {
       print "# TOWER CLEAR".
-      if DO_WARP { set warp to 3. }
-      // cleared tower
       print "### HOVER PHASE ###".
-      lock steering to up. // hoverSteering().
-      lock throttle to hoverThrottle().
+      doHoverPhase().
 
-      // reduce to 3 engines when hovering on 1/3 throttle
+      // reduce thrust to 3 engines at 1/3 throttle
       when (hoverThrottle() < 0.33) then {
-        toggle AG1. // drop to 3 engines
-        print "# HLECO".
+        doEngineMode().
 
         // fuel load burned, boost alt
         when (ship:mass < (2 * ship:drymass)) then {
           print "### BOOST PHASE ###".
-          if DO_WARP { set warp to 0. }
-          wait 2.
-          lock steering to heading(90, 88).
-          lock throttle to 1.
+          doBoostPhase().
 
-          // boost complete
+          // boost complete, go ballistic
           when (ship:APOAPSIS > BOOST_APO) then {
             print "### BALLISTIC PHASE ###".
-            lock throttle to 0.
-            print "# MECO".
+            doBallisticPhase().
 
             // descending at top of boost
             when ship:verticalSpeed < 0 then {
               print "### DESCENT PHASE ###".
-              lock steering to srfRetrograde.
-              rcs on.
-              AG7 on. // gridfins
+              doDescentPhase().
 
               // throttle up
-              print "### HOVERSLAM PHASE ###".
               when (SLAM_THROTT > HOW_SUICIDAL) then {
-                print "# ME IGNITION".
-                lock throttle to SLAM_THROTT.
+                print "### HOVERSLAM PHASE ###".
+                doHoverslam().
 
                 // gear when approaching ground
                 when distanceToGround() < GAGL then {
-                   gear on.
-                   print "# LANDING STRUTS".
+                  doLandingGear().
 
                    when (ship:status = "LANDED") then {
-                     print "# TOUCHDOWN".
-                     lock throttle to 0.
-                     AG7 off. // gridfins
-                     lock steering to up.
-                     set AUTOPILOT to false.
-                     print "# GUIDANCE OFFLINE - OK".
+                     doTouchDown().
                    }
                 }
               }
@@ -131,6 +107,66 @@ function doFlightTriggers {
       }
     }
   }
+}
+
+function doTowerPhase {
+  print "# Target Hover: " + HAGL + "m AGL".
+  print "# Target Boost Apo: " + BOOST_APO + "m".
+  doCountdown(TCOUNT, TIGNITE, Tmin, TGANTRY).
+  lock throttle to towerThrottle().
+  print "# LIFTOFF".
+  lock steering to up. // up
+  wait 1.
+  rcs off.
+}
+
+function doHoverPhase {
+  lock steering to up. // hoverSteering().
+  lock throttle to hoverThrottle().
+  if DO_WARP { set warp to WARP_SPEED. }
+}
+
+function doEngineMode {
+  toggle AG1.
+  print "# HLECO".
+}
+
+function doBoostPhase {
+  if DO_WARP { set warp to 0. }
+  wait 2.
+  lock steering to heading(90, 88).
+  lock throttle to 1.
+}
+
+function doBallisticPhase {
+  lock throttle to 0.
+  print "# MECO".
+}
+
+function doDescentPhase {
+  lock steering to srfRetrograde.
+  rcs on.
+  AG7 on.
+  print "# GRIDFINS DEPLOYED".
+}
+
+function doHoverslam {
+  print "# ME IGNITION".
+  lock throttle to SLAM_THROTT.
+}
+
+function doLandingGear {
+  gear on.
+  print "# LANDING STRUTS".
+}
+
+function doTouchDown {
+  print "# TOUCHDOWN".
+  lock throttle to 0.
+  AG7 off. // gridfins
+  lock steering to up.
+  set AUTOPILOT to false.
+  print "# GUIDANCE OFFLINE - OK".
 }
 
 function doPreservedTriggers {
@@ -228,11 +264,6 @@ function desiredTWR {
   local dv1 is dv0 - v0.
   // return max(0.8,min(1.3,(0.00012 * dV1^3) + (0.000514286 * dV1^2 + (0.003 * dV1) +0.998286))).
   return max(0,min(1.3,(0.038118 + (0.961882 * (constant:e ^ (0.0770805 * dv1)))))).
-}
-
-function doHoverslam {
-  // stopping distance formula
-  // sd = v^2 / 2a
 }
 
 function distanceToGround {
