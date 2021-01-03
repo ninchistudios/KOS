@@ -10,33 +10,28 @@
 // AG8: Vacuum Accel-safe Modules (e.g. fairings) - safe to do a burn after deployed
 // AG9: Vacuum Accel-risk Modules (e.g. big antennas) - only deployed when there are no more burns
 
-// launch
-// ascend to 250m
-// hover for 30 sec
-// descend
-// land conservatively at same spot
-
 @LAZYGLOBAL OFF.
 
-// include utilities once and only once
-copypath("0:/common/Utils", "").
-runoncepath("Utils").
-
 print " ".
-print "#####################################".
-print "# FALCON 9 HOVERSLAM TEST PROGRAM 1 #".
-print "#####################################".
+print "##########################################################".
+print "# MISSION: 2021-F9-007-T / F9 HOVERSLAM TESTFLIGHT 2     #".
+print "#                                                        #".
+print "# Mission Objective:                                     #".
+print "# - launch and hover                                     #".
+print "# - boost to altitude                                    #".
+print "# - perform hoverslam at semi-random location            #".
+print "##########################################################".
 print " ".
-
 // CONFIGURE FLIGHT
 local DO_WARP is false. // set true to physics warp through boring bits
-local TCOUNT is 3. // T-Minus countdown
+local TCOUNT is 5. // T-Minus countdown
+local TGANTRY is 3. // Gantry at T-Minus...
 local TIGNITE is 1. // Ignite at T-Minus...
 local Tmin is 0.1. // minimum throttle setting
 local BOOST_APO is 12000. // after hover, how high should we boost
 local HAGL is 150. // TARGET HOVER ALT METERS AGL
 local GAGL is 500. // engage gear below on descent
-local HOW_SUICIDAL is 0.9. // how late do you want to leave the burn? Close to but < 1.0
+local HOW_SUICIDAL is 0.9. // how late do you want to leave the burn? Close to but < 1.0 for max efficiency
 // END CONFIGURE FLIGHT
 
 // CONSTANTS, TUNING AND GLOBALS
@@ -64,29 +59,33 @@ function doFlightTriggers {
 
   when true THEN {
     // Tower Phase
-    print "# TOWER PHASE #".
+    print "### TOWER PHASE ###".
+    print "# Target Hover: " + HAGL + "m AGL".
+    print "# Target Boost Apo: " + BOOST_APO + "m".
+    doCountdown(TCOUNT, TIGNITE, Tmin, TGANTRY).
     lock throttle to towerThrottle().
+    print "# LIFTOFF".
     lock steering to up. // up
-
-    doSafeStage().
     wait 1.
     rcs off.
 
     // when AGL > LAUNCH_AGL THEN {
     when true THEN {
+      print "# TOWER CLEAR".
       if DO_WARP { set warp to 3. }
       // cleared tower
-      print "# HOVER PHASE #".
+      print "### HOVER PHASE ###".
       lock steering to up. // hoverSteering().
       lock throttle to hoverThrottle().
 
       // reduce to 3 engines when hovering on 1/3 throttle
       when (hoverThrottle() < 0.33) then {
         toggle AG1. // drop to 3 engines
+        print "# HLECO".
 
         // fuel load burned, boost alt
         when (ship:mass < (2 * ship:drymass)) then {
-          print "# ASCENT PHASE #".
+          print "### BOOST PHASE ###".
           if DO_WARP { set warp to 0. }
           wait 2.
           lock steering to heading(90, 88).
@@ -94,33 +93,35 @@ function doFlightTriggers {
 
           // boost complete
           when (ship:APOAPSIS > BOOST_APO) then {
-            // hoverslam
-            print "# BALLISTIC PHASE #".
+            print "### BALLISTIC PHASE ###".
             lock throttle to 0.
+            print "# MECO".
 
             // descending at top of boost
             when ship:verticalSpeed < 0 then {
-              print "# DESCENT PHASE #".
+              print "### DESCENT PHASE ###".
               lock steering to srfRetrograde.
               rcs on.
               AG7 on. // gridfins
 
               // throttle up
-              print "# HOVERSLAM PHASE #".
+              print "### HOVERSLAM PHASE ###".
               when (SLAM_THROTT > HOW_SUICIDAL) then {
-                print "# BURN #".
+                print "# ME IGNITION".
                 lock throttle to SLAM_THROTT.
 
                 // gear when approaching ground
                 when distanceToGround() < GAGL then {
                    gear on.
+                   print "# LANDING STRUTS".
 
                    when (ship:status = "LANDED") then {
-                     print "# SLAM DONE #".
+                     print "# TOUCHDOWN".
                      lock throttle to 0.
                      AG7 off. // gridfins
                      lock steering to up.
                      set AUTOPILOT to false.
+                     print "# GUIDANCE OFFLINE - OK".
                    }
                 }
               }
@@ -136,6 +137,7 @@ function doPreservedTriggers {
 
 }
 
+// TODO refactor
 function doDebug {
   // print "X Accel:" + ROUND(ship:sensors:acc:x,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 6).
   // print "Y Accel:" + ROUND(ship:sensors:acc:y,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 5).
@@ -160,26 +162,23 @@ function doMain {
   }
 }
 
-// runs once
+// runs once at the start of the script
 function doSetup {
   neutraliseRoll().
-  set kuniverse:TimeWarp:MODE to "PHYSICS".
   set HTPID:SETPOINT TO HAGL.
-  // surface key flight data
+  lock vAngle to VANG(ship:facing:forevector, ship:up:forevector).
+  lock Fg to (body:mu / body:radius^2) * mass.
+  lock AGL to baseRadalt(LAUNCH_AGL).
+  lock SLAM_THROTT to min (1, stoppingDistance() / distanceToGround()).
+  set kuniverse:TimeWarp:MODE to "PHYSICS".
+  // surface key flight data that is mission-agnostic
   print "Launch AMSL: " + LAUNCH_AMSL + "m".
   print "Launch AGL: " + LAUNCH_AGL + "m".
-  print "Target Hover: " + HAGL + "m AGL".
-  print "Target Boost Apo: " + BOOST_APO + "m".
   if ADDONS:TR:AVAILABLE {
       PRINT "Trajectories available - OK".
   } else {
       PRINT "ERROR: Trajectories is not available.".
   }
-  lock vAngle to VANG(ship:facing:forevector, ship:up:forevector).
-  lock Fg to (body:mu / body:radius^2) * mass.
-  lock AGL to baseRadalt(LAUNCH_AGL).
-  lock SLAM_THROTT to min (1, stoppingDistance() / distanceToGround()).
-  doCountdown(TCOUNT, TIGNITE, Tmin).
 }
 
 // run last

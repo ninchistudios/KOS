@@ -73,7 +73,6 @@ function deployOrbitSafe {
 // stage with a delay until ready
 function doSafeStage {
   wait until STAGE:READY.
-  // print "# STAGING #".
   STAGE.
 }
 
@@ -134,13 +133,18 @@ function stageNeeded {
 
 // T-minus countdown
 // param t - T-Minus count starts at t
-// param i - Ingition at T-Minus i
+// param i - Ingition at T-Minus i - -1 to disable
 // Tmin - min throttle at ignition
+// param gt - Gantry stage at T-Minus gt - -1 to disable
 function doCountdown {
-  local parameter t,i,Tmin.
+  local parameter t,i,Tmin,gt.
   print "# T MINUS".
   from {local c is t.} until c = 0 step {set c to c - 1.} do {
     print "# ... " + c.
+    if (c = gt) {
+      print "# GANTRY".
+      doSafeStage().
+    }
     if (c = i) {
       print "# IGNITION".
       lock throttle to Tmin.
