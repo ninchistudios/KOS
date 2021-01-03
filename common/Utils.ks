@@ -91,7 +91,6 @@ function baseRadalt {
 // returns the throttle required to keep Q under Qmax
 function ascentThrottle {
   parameter Tmin, Tmax, qMax, iQ, limitQ.
-  // print "THROTT:" + ROUND(THROTTLE,1) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 4).
   return Tmax.
 }
 
@@ -104,20 +103,19 @@ function ascentPitch {
   // local tp is min(89.9,217.86 - 18.679 * ln(vessel:ALTITUDE)).
   // log fit({100,89.9},{150000,0.1}) on https://www.wolframalpha.com/input/
   local tp is min(89.9,-12.2791 * ln(vessel:APOAPSIS * 0.000000661259)).
-  // print "APTCH:" + ROUND(tp,1) + "  " at (TERMINAL:WIDTH - 16,4).
   return tp.
 }
 
 // vacuum accel-safe deployments (e.g. fairings) should be set to AG1
 function deployAccelSafe {
   AG8 ON.
-  print "# ACCEL-SAFE MODULES DEPLOYED #".
+  logMessage(LOGADVISORY,"ACCEL-SAFE MODULES DEPLOYED").
 }
 
 // vacuum orbit-safe deployments (e.g. science) should be set to AG2
 function deployOrbitSafe {
   AG9 ON.
-  print "# ORBIT-SAFE MODULES DEPLOYED #".
+  logMessage(LOGADVISORY,"ORBIT-SAFE MODULES DEPLOYED").
 }
 
 // stage with a delay until ready
@@ -172,15 +170,15 @@ function stageNeeded {
 // param gt - Gantry stage at T-Minus gt - -1 to disable
 function doCountdown {
   local parameter t,i,Tmin,gt.
-  print "# T MINUS".
+  logMessage(LOGADVISORY,"T MINUS").
   from {local c is t.} until c = 0 step {set c to c - 1.} do {
-    print "# ... " + c.
+    logMessage(LOGADVISORY," ... " + c).
     if (c = gt) {
-      print "# GANTRY".
+      logMessage(LOGADVISORY,"GANTRY").
       doSafeStage().
     }
     if (c = i) {
-      print "# IGNITION".
+      logMessage(LOGADVISORY,"IGNITION").
       lock throttle to Tmin.
       doSafeStage().
     }

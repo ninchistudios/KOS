@@ -11,16 +11,11 @@ function hoverThrottle {
   // TWRd = (0.00012 * dV^3) + (0.000514286 * dV^2 + (0.003 * dV) +0.998286)
   // dV = (0.0732601 * dH^3) - (17.326 * dH)
   local dH is AGL - HAGL. // delta between desired height and actual height
-  //print "dH:" + ROUND(dH,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 13).
   local dV is desiredVv(dH). // desired surface velocity based on dH
-  //print "dV:" + ROUND(dV,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 14).
   local TWRd is desiredTWR(dV, ship:verticalspeed). // desired TWR
-  //print "TWRd:" + ROUND(TWRd,3) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 15).
   // local thrott is Fg * Tf / COS(vAngle) / AVAILABLETHRUST.
   local vthrott is TWRd * Fg / max(1,AVAILABLETHRUST). // throttle assuming vertical
-  //print "vthrott:" + ROUND(vthrott,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 16).
   local thrott is vthrott / COS(vAngle).
-  //print "thrott:" + ROUND(thrott,3) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 17).
   if (thrott < Tmin) {
     set thrott to Tmin.
     // TODO if we're still accelerating up we need to shutdown some engines

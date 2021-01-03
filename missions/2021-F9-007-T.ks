@@ -28,8 +28,8 @@ print " ".
 // CONFIGURE FLIGHT
 local DO_WARP is true. // set true to physics warp through boring bits
 local WARP_SPEED is 2. // 1/2/3 corresponding to a 2x / 3x / 4x physics warp
-local TCOUNT is 5. // T-Minus countdown
-local TGANTRY is 3. // Gantry at T-Minus...
+local TCOUNT is 3. // T-Minus countdown
+local TGANTRY is 1. // Gantry at T-Minus...
 local TIGNITE is 1. // Ignite at T-Minus...
 local Tmin is 0.1. // minimum throttle setting
 local BOOST_APO is 5000. // after hover, how high should we boost
@@ -77,22 +77,22 @@ function doFlightTriggers {
 
         // fuel load burned, boost alt
         when (ship:mass < (2 * ship:drymass)) then {
-          print "### BOOST PHASE ###".
+          logMessage(LOGMAJOR,"BOOST PHASE").
           doBoostPhase().
 
           // boost complete, go ballistic
           when (ship:APOAPSIS > BOOST_APO) then {
-            print "### BALLISTIC PHASE ###".
+            logMessage(LOGMAJOR,"BALLISTIC PHASE").
             doBallisticPhase().
 
             // descending at top of boost
             when ship:verticalSpeed < 0 then {
-              print "### DESCENT PHASE ###".
+              logMessage(LOGMAJOR,"DESCENT PHASE").
               doDescentPhase().
 
               // throttle up
               when (SLAM_THROTT > HOW_SUICIDAL) then {
-                print "### HOVERSLAM PHASE ###".
+                logMessage(LOGMAJOR,"HOVERSLAM PHASE").
                 doHoverslam().
 
                 // gear when approaching ground
@@ -113,11 +113,11 @@ function doFlightTriggers {
 }
 
 function doTowerPhase {
-  print "# Target Hover: " + HAGL + "m AGL".
-  print "# Target Boost Apo: " + BOOST_APO + "m".
+  logMessage(LOGADVISORY,"Target Hover: " + HAGL + "m AGL").
+  logMessage(LOGADVISORY,"Target Boost Apo: " + BOOST_APO + "m").
   doCountdown(TCOUNT, TIGNITE, Tmin, TGANTRY).
   lock throttle to towerThrottle().
-  print "# LIFTOFF".
+  logMessage(LOGADVISORY,"LIFTOFF").
   lock steering to up. // up
   wait 1.
   rcs off.
@@ -131,7 +131,7 @@ function doHoverPhase {
 
 function doEngineMode {
   toggle AG1.
-  print "# HLECO".
+  logMessage(LOGADVISORY,"HLECO").
 }
 
 function doBoostPhase {
@@ -143,33 +143,33 @@ function doBoostPhase {
 
 function doBallisticPhase {
   lock throttle to 0.
-  print "# MECO".
+  logMessage(LOGADVISORY,"MECO").
 }
 
 function doDescentPhase {
   lock steering to srfRetrograde.
   rcs on.
   AG7 on.
-  print "# GRIDFINS DEPLOYED".
+  logMessage(LOGADVISORY,"GRIDFINS DEPLOYED").
 }
 
 function doHoverslam {
-  print "# ME IGNITION".
+  logMessage(LOGADVISORY,"ME IGNITION").
   lock throttle to SLAM_THROTT.
 }
 
 function doLandingGear {
   gear on.
-  print "# LANDING STRUTS".
+  logMessage(LOGADVISORY,"LANDING STRUTS").
 }
 
 function doTouchDown {
-  print "# TOUCHDOWN".
+  logMessage(LOGADVISORY,"TOUCHDOWN").
   lock throttle to 0.
   AG7 off. // gridfins
   lock steering to up.
   set AUTOPILOT to false.
-  print "# GUIDANCE OFFLINE - OK".
+  logMessage(LOGADVISORY,"GUIDANCE OFFLINE - OK").
 }
 
 // used for triggers that can run multiple times
@@ -210,12 +210,12 @@ function doSetup {
   lock SLAM_THROTT to min (1, stoppingDistance() / distanceToGround(LAUNCH_AGL,AGL_TWEAK)).
   set kuniverse:TimeWarp:MODE to "PHYSICS".
   // surface key flight data that is mission-agnostic
-  print "Launch AMSL: " + LAUNCH_AMSL + "m".
-  print "Launch AGL: " + LAUNCH_AGL + "m".
+  logMessage(LOGADVISORY,"Launch AMSL: " + LAUNCH_AMSL + "m").
+  logMessage(LOGADVISORY,"Launch AGL: " + LAUNCH_AGL + "m").
   if ADDONS:TR:AVAILABLE {
-      PRINT "Trajectories available - OK".
+      logMessage(LOGADVISORY,"Trajectories available - OK").
   } else {
-      PRINT "ERROR: Trajectories is not available.".
+      logMessage(LOGERROR,"Trajectories is not available.").
   }
 }
 
@@ -224,7 +224,7 @@ function doFinalise {
   lock THROTTLE to 0.
   // TODO clear flightplan
   // set ship:control:neutralize to true.
-  print "### PROGRAM COMPLETE ###".
+  logMessage(LOGMAJOR,"PROGRAM COMPLETE").
   until false {
     wait 1.
   }
