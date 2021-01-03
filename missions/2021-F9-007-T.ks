@@ -72,7 +72,7 @@ function doFlightTriggers {
       doHoverPhase().
 
       // reduce thrust to 3 engines at 1/3 throttle
-      when (hoverThrottle() < 0.33) then {
+      when (hoverThrottle(AGL,HAGL,Tmin) < 0.33) then {
         doEngineMode().
 
         // fuel load burned, boost alt
@@ -96,7 +96,7 @@ function doFlightTriggers {
                 doHoverslam().
 
                 // gear when approaching ground
-                when distanceToGround() < GAGL then {
+                when distanceToGround(LAUNCH_AGL,AGL_TWEAK) < GAGL then {
                   doLandingGear().
 
                    when (ship:status = "LANDED") then {
@@ -125,7 +125,7 @@ function doTowerPhase {
 
 function doHoverPhase {
   lock steering to up. // hoverSteering().
-  lock throttle to hoverThrottle().
+  lock throttle to hoverThrottle(AGL,HAGL,Tmin).
   if DO_WARP { set warp to WARP_SPEED. }
 }
 
@@ -207,7 +207,7 @@ function doSetup {
   lock vAngle to VANG(ship:facing:forevector, ship:up:forevector).
   lock Fg to (body:mu / body:radius^2) * mass.
   lock AGL to baseRadalt(LAUNCH_AGL).
-  lock SLAM_THROTT to min (1, stoppingDistance() / distanceToGround()).
+  lock SLAM_THROTT to min (1, stoppingDistance() / distanceToGround(LAUNCH_AGL,AGL_TWEAK)).
   set kuniverse:TimeWarp:MODE to "PHYSICS".
   // surface key flight data that is mission-agnostic
   print "Launch AMSL: " + LAUNCH_AMSL + "m".
@@ -228,56 +228,4 @@ function doFinalise {
   until false {
     wait 1.
   }
-}
-
-function hoverThrottle {
-  // thrott = TWRd x Fg / AVAILABLETHRUST
-  // TWRd = (0.00012 * dV^3) + (0.000514286 * dV^2 + (0.003 * dV) +0.998286)
-  // dV = (0.0732601 * dH^3) - (17.326 * dH)
-  local dH is AGL - HAGL. // delta between desired height and actual height
-  //print "dH:" + ROUND(dH,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 13).
-  local dV is desiredVv(dH). // desired surface velocity based on dH
-  //print "dV:" + ROUND(dV,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 14).
-  local TWRd is desiredTWR(dV, ship:verticalspeed). // desired TWR
-  //print "TWRd:" + ROUND(TWRd,3) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 15).
-  // local thrott is Fg * Tf / COS(vAngle) / AVAILABLETHRUST.
-  local vthrott is TWRd * Fg / max(1,AVAILABLETHRUST). // throttle assuming vertical
-  //print "vthrott:" + ROUND(vthrott,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 16).
-  local thrott is vthrott / COS(vAngle).
-  //print "thrott:" + ROUND(thrott,3) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 17).
-  if (thrott < Tmin) {
-    set thrott to Tmin.
-    // TODO if we're still accelerating up we need to shutdown some engines
-  } else if (thrott > 1) {
-    set thrott to 1.
-  }
-  return thrott.
-}
-
-function distanceToGround {
-  return altitude - body:geopositionOf(ship:position):terrainHeight - LAUNCH_AGL - AGL_TWEAK.
-}
-
-function stoppingDistance {
-  local grav is constant():g * (body:mass / body:radius^2).
-  local maxDeceleration is (ship:availableThrust / ship:mass) - grav.
-  return ship:verticalSpeed^2 / (2 * maxDeceleration).
-}
-
-function predictedRadalt {
-  local s0 is AGL. // AGL of the nozzles
-  print "s0:" + ROUND(s0,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 11).
-  local u is ship:verticalspeed. // the current velocity, -ve up
-  print "u:" + ROUND(u,3) at (TERMINAL:WIDTH - 12,TERMINAL:HEIGHT - 10).
-  local a is ship:sensors:acc:y. // this appears to be very unreliable
-  print "a:" + ROUND(a,3) at (TERMINAL:WIDTH - 12,TERMINAL:HEIGHT - 9).
-  // t is the time to v = 0 under the current a: v=u+at
-  local t is (0 - u) / a.
-  print "t:" + ROUND(t,3) at (TERMINAL:WIDTH - 12,TERMINAL:HEIGHT - 8).
-  // distance to peak: s=ut+1/2at^2
-  local s is (u * t) + (0.5 * a * (t^2)).
-  print "s:" + ROUND(t,3) at (TERMINAL:WIDTH - 12,TERMINAL:HEIGHT - 7).
-  set PREDICTED to s + s0. // TODO is this correct?
-  print "predicted:" + ROUND(PREDICTED,1) at (TERMINAL:WIDTH - 20,TERMINAL:HEIGHT - 12).
-  return PREDICTED.
 }
