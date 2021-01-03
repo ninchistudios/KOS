@@ -17,7 +17,7 @@ runoncepath("LandingUtils").
 
 print " ".
 print "##########################################################".
-print "# MISSION: 2021-F9-007-T / F9 HOVERSLAM TESTFLIGHT 2     #".
+print "# MISSION: 2021-SH-001-T / SH HOVERSLAM TESTFLIGHT 1     #".
 print "#                                                        #".
 print "# Mission Objective:                                     #".
 print "# - launch and hover                                     #".
@@ -26,21 +26,21 @@ print "# - perform hoverslam at semi-random location            #".
 print "##########################################################".
 print " ".
 // CONFIGURE FLIGHT
-local DO_WARP is true. // set true to physics warp through boring bits
+local DO_WARP is false. // set true to physics warp through boring bits
 local WARP_SPEED is 2. // 1/2/3 corresponding to a 2x / 3x / 4x physics warp
 local TCOUNT is 3. // T-Minus countdown
-local TGANTRY is 1. // Gantry at T-Minus...
+local TGANTRY is -1. // Gantry at T-Minus...
 local TIGNITE is 1. // Ignite at T-Minus...
 local Tmin is 0.1. // minimum throttle setting
 local BOOST_APO is 5000. // after hover, how high should we boost
 local HAGL is 250. // TARGET HOVER ALT METERS AGL
 local GAGL is 500. // engage gear below on descent
 local HOW_SUICIDAL is 0.9. // how late do you want to leave the burn? Close to but < 1.0 for max efficiency
-local ENGINE_MODE_FACTOR is 3. // by what factor does thrust reduce changing mode? F9 = 3, SH = 4
+local ENGINE_MODE_FACTOR is 4. // by what factor does thrust reduce changing mode? F9 = 3, SH = 4
 // END CONFIGURE FLIGHT
 
 // CONSTANTS, TUNING AND GLOBALS
-local AGL_TWEAK is 2.5. // hoverslam AGL tweak - a little extra height to account for struts etc
+local AGL_TWEAK is 1. // hoverslam AGL tweak - a little extra height to account for struts etc
 local HTp is 0.05. // Hover Throttle P
 local HTi is 0.1. // Hover Throttle I
 local HTd is 0.15. // Hover Throttle D
