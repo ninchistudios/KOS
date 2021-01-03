@@ -1,6 +1,13 @@
 // THIS SCRIPT SHOULD HAVE NO OUTBOUND DEPENDENCIES
+// AND SHOULD BE RUN IN EVERY BOOT FILE BEFORE THE MAIN SCRIPT
 
 @LAZYGLOBAL OFF.
+
+// GLOBALS - use sparingly
+global LOGERROR is 3. // Error log message - see Utils.logConsole
+global LOGMAJOR is 2. // Major log message - see Utils.logConsole
+global LOGADVISORY is 1. // advisory log message - see Utils.logConsole
+global LOGTELEMETRY is 0. // advisory log message - see Utils.logConsole
 
 local LAST_T is 0.
 local TICK is 0.
@@ -14,6 +21,39 @@ local PRE_APO is true.
 local NO_STAGE_BEFORE is 0.
 local CLAMP_POS_PITCH is 15.
 local CLAMP_NEG_PITCH is -89.
+local BLANK_TELEMETRY is "                    ". // 20 char
+
+// wrapper for logConsole, simplified for regular messages
+// param mType : the type of message. 1=advisory, 2=major, 3=error
+// param msg : the message. if telemetry, used as the name value (advise max 8 characters for telemetry)
+function logMessage {
+  parameter mType,msg.
+  logConsole(mType,msg,0,0).
+}
+
+// utility for neat and consistent console output
+// param mType : the type of message. 0=telemetry, 1=advisory, 2=major, 3=error
+// param msg : the message. if telemetry, used as the name value (advise max 8 characters for telemetry)
+// param val : the telemetry value (max 8 characters). use 0 for other messages
+// param index : the line on which the telemetry should be output. TODO refactor as brittle
+function logConsole {
+  parameter mType,msg,val,index.
+  local out is "".
+  if mType = LOGTELEMETRY {
+    set out to msg + ":" + val.
+    print BLANK_TELEMETRY at (TERMINAL:WIDTH - 21, TERMINAL:HEIGHT - index).
+    print out at (TERMINAL:WIDTH - (11 + msg:length),TERMINAL:HEIGHT - index).
+  } else {
+    if mType = LOGADVISORY {
+      set out to "# " + msg.
+    } else if mType = LOGMAJOR {
+      set out to "### " + msg + " ###".
+    } else if mType = LOGERROR {
+      set out to "#X# ERROR: " + msg + " #X#".
+    }
+    print out.
+  }
+}
 
 function neutraliseRoll {
   SET STEERINGMANAGER:ROLLPID:KP TO 0. // set roll rate to 0.

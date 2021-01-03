@@ -32,14 +32,14 @@ local TCOUNT is 5. // T-Minus countdown
 local TGANTRY is 3. // Gantry at T-Minus...
 local TIGNITE is 1. // Ignite at T-Minus...
 local Tmin is 0.1. // minimum throttle setting
-local BOOST_APO is 12000. // after hover, how high should we boost
-local HAGL is 500. // TARGET HOVER ALT METERS AGL
+local BOOST_APO is 5000. // after hover, how high should we boost
+local HAGL is 250. // TARGET HOVER ALT METERS AGL
 local GAGL is 500. // engage gear below on descent
 local HOW_SUICIDAL is 0.9. // how late do you want to leave the burn? Close to but < 1.0 for max efficiency
 // END CONFIGURE FLIGHT
 
 // CONSTANTS, TUNING AND GLOBALS
-local AGL_TWEAK is 3. // hoverslam AGL tweak - a little extra height to account for struts etc
+local AGL_TWEAK is 2.5. // hoverslam AGL tweak - a little extra height to account for struts etc
 local HTp is 0.05. // Hover Throttle P
 local HTi is 0.1. // Hover Throttle I
 local HTd is 0.15. // Hover Throttle D
@@ -62,13 +62,13 @@ doFinalise().
 function doFlightTriggers {
 
   when true THEN {
-    print "### TOWER PHASE ###".
+    logMessage(LOGMAJOR,"TOWER PHASE").
     doTowerPhase().
 
     // clear of the tower
     when AGL > (2 * LAUNCH_AGL) THEN {
-      print "# TOWER CLEAR".
-      print "### HOVER PHASE ###".
+      logMessage(LOGADVISORY,"TOWER CLEAR").
+      logMessage(LOGMAJOR,"HOVER PHASE").
       doHoverPhase().
 
       // reduce thrust to 3 engines at 1/3 throttle
@@ -172,24 +172,23 @@ function doTouchDown {
   print "# GUIDANCE OFFLINE - OK".
 }
 
+// used for triggers that can run multiple times
+// note that preserve has been replaced by return - https://ksp-kos.github.io/KOS/language/flow.html
 function doPreservedTriggers {
 
 }
 
-// TODO refactor
-function doDebug {
-  // print "X Accel:" + ROUND(ship:sensors:acc:x,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 6).
-  // print "Y Accel:" + ROUND(ship:sensors:acc:y,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 5).
-  // print "Z Accel:" + ROUND(ship:sensors:acc:z,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 4).
-  print "WetMass:" + ROUND(ship:wetmass,1) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 9).
-  print "DryMass:" + ROUND(ship:drymass,1) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 8).
-  print "Mass:" + ROUND(ship:mass,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 7).
-  print "Vv:" + ROUND(ship:verticalspeed,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 6).
-  print "vAngle:" + ROUND(vAngle,3) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 5).
-  print "Fg:" + ROUND(Fg,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 4).
-  print "AGL:" + ROUND(AGL, 1) at (TERMINAL:WIDTH - 14,TERMINAL:HEIGHT - 3).
-  print "AMSL:" + ROUND(ship:ALTITUDE - LAUNCH_AGL,3) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 2).
-  print "SlamPCT:" + ROUND(SLAM_THROTT, 3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 1).
+function doTelemetry {
+  // logConsole parameters mType,msg,val,index.
+  logConsole(LOGTELEMETRY,"WetMass",ROUND(ship:wetmass,1),9).
+  logConsole(LOGTELEMETRY,"DryMass",ROUND(ship:drymass,1),8).
+  logConsole(LOGTELEMETRY,"Mass",ROUND(ship:mass,1),7).
+  logConsole(LOGTELEMETRY,"Vv",ROUND(ship:verticalspeed,3),6).
+  logConsole(LOGTELEMETRY,"vAngle",ROUND(vAngle,3),5).
+  logConsole(LOGTELEMETRY,"Fg",ROUND(Fg,3),4).
+  logConsole(LOGTELEMETRY,"AGL",ROUND(AGL, 1),3).
+  logConsole(LOGTELEMETRY,"AMSL",ROUND(ship:ALTITUDE - LAUNCH_AGL,3),2).
+  logConsole(LOGTELEMETRY,"SlamPCT",ROUND(SLAM_THROTT, 3),1).
 }
 
 // loops while inflight
@@ -197,7 +196,7 @@ function doMain {
   doPreservedTriggers().
   doFlightTriggers().
   until not AUTOPILOT {
-    doDebug().
+    doTelemetry().
   }
 }
 
@@ -236,16 +235,16 @@ function hoverThrottle {
   // TWRd = (0.00012 * dV^3) + (0.000514286 * dV^2 + (0.003 * dV) +0.998286)
   // dV = (0.0732601 * dH^3) - (17.326 * dH)
   local dH is AGL - HAGL. // delta between desired height and actual height
-  print "dH:" + ROUND(dH,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 13).
+  //print "dH:" + ROUND(dH,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 13).
   local dV is desiredVv(dH). // desired surface velocity based on dH
-  print "dV:" + ROUND(dV,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 14).
+  //print "dV:" + ROUND(dV,3) at (TERMINAL:WIDTH - 13,TERMINAL:HEIGHT - 14).
   local TWRd is desiredTWR(dV, ship:verticalspeed). // desired TWR
-  print "TWRd:" + ROUND(TWRd,3) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 15).
+  //print "TWRd:" + ROUND(TWRd,3) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 15).
   // local thrott is Fg * Tf / COS(vAngle) / AVAILABLETHRUST.
   local vthrott is TWRd * Fg / max(1,AVAILABLETHRUST). // throttle assuming vertical
-  print "vthrott:" + ROUND(vthrott,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 16).
+  //print "vthrott:" + ROUND(vthrott,3) at (TERMINAL:WIDTH - 18,TERMINAL:HEIGHT - 16).
   local thrott is vthrott / COS(vAngle).
-  print "thrott:" + ROUND(thrott,3) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 17).
+  //print "thrott:" + ROUND(thrott,3) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 17).
   if (thrott < Tmin) {
     set thrott to Tmin.
     // TODO if we're still accelerating up we need to shutdown some engines
