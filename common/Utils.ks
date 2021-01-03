@@ -15,6 +15,11 @@ local NO_STAGE_BEFORE is 0.
 local CLAMP_POS_PITCH is 15.
 local CLAMP_NEG_PITCH is -89.
 
+function neutraliseRoll {
+  SET STEERINGMANAGER:ROLLPID:KP TO 0. // set roll rate to 0.
+  SET STEERINGMANAGER:ROLLPID:KI TO 0. // set roll rate to 0.
+}
+
 function logpid {
   return "P:" + CPp + " I:" + CPi + " D:" + CPd + " +C:" + CLAMP_POS_PITCH + " -C:" + CLAMP_NEG_PITCH.
 }
@@ -27,36 +32,39 @@ function hoverSteering {
   return up.
 }
 
-// note this changes with fuel burn, so... TODO need to figure this out.
+// returns the true radalt of the base of the vehicle, adjusted for height of the control module
+// TODO this requires a tweak based on the deployment of landing gear
+// param launchRadAlt : the reported radalt at launch
+// returns the radalt of the vehicle base
 function baseRadalt {
   parameter launchRadAlt.
   return MAX(0.00001,((ALTITUDE-GEOPOSITION:TERRAINHEIGHT)-launchRadAlt)).
 }
 
 // control the throttle to reduce Q if needed
+// TODO implement
 // param Tmin: min throttle
 // param Tmax: max throttle
 // param QMax: limit Q to this if poss
 // param iQ: current Q
 // param limitQ: should Q be limited
+// returns the throttle required to keep Q under Qmax
 function ascentThrottle {
   parameter Tmin, Tmax, qMax, iQ, limitQ.
   // print "THROTT:" + ROUND(THROTTLE,1) at (TERMINAL:WIDTH - 17,TERMINAL:HEIGHT - 4).
   return Tmax.
 }
 
-function ascentHeading {
-  parameter tgt_incl.
-  return tgt_incl.
-}
-
 // ascent on a logarithmic path
+// TODO take in a max AoA to minimise aero RUDs
+// param vessel : the vessel being controlled
+// returns tp : the instantaneous target pitch to achieve the ascent profile
 function ascentPitch {
   parameter vessel.
   // local tp is min(89.9,217.86 - 18.679 * ln(vessel:ALTITUDE)).
   // log fit({100,89.9},{150000,0.1}) on https://www.wolframalpha.com/input/
   local tp is min(89.9,-12.2791 * ln(vessel:APOAPSIS * 0.000000661259)).
-  print "APTCH:" + ROUND(tp,1) + "  " at (TERMINAL:WIDTH - 16,4).
+  // print "APTCH:" + ROUND(tp,1) + "  " at (TERMINAL:WIDTH - 16,4).
   return tp.
 }
 
@@ -78,6 +86,8 @@ function doSafeStage {
   STAGE.
 }
 
+// when updated with the latest Q, returns the highest Q reported
+// param latestQ : the currently measured Q
 function topQ {
   parameter latestQ.
   if latestQ > HIGHEST_Q {
@@ -86,43 +96,25 @@ function topQ {
   return HIGHEST_Q.
 }
 
-// usually used to give ullage boosters a chance to burn out
+// usually used to give ullage boosters a chance to do their thing
+// param delay : wait at least this number of seconds before staging
 function doStageDelay {
   parameter delay.
   set NO_STAGE_BEFORE to TIME:SECONDS + delay.
   set LAST_T to 0.
 }
 
-// have we experienced a drop in available thrust?
-function simpleStageNeeded {
+// have we experienced a drop in available thrust, and thus staging needed?
+// potentially problematic with multi-mode engines (e.g. on F9)
+// parameter vessel : the vessel to be checked
+// returns bool : is a stage needed
+function stageNeeded {
   parameter vessel.
   if TIME:SECONDS < NO_STAGE_BEFORE {
     return false.
   }
   local t is vessel:AVAILABLETHRUST.
   set TICK to TICK + 1.
-  //print "Tick:" + TICK at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 7).
-  //print "Last:" + ROUND(LAST_T,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 6).
-  //print "Avail:" + ROUND(t,1) at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 5).
-  if (t = 0 or t < (LAST_T - 10)) {
-    // uh oh, loss of available thrust
-    set LAST_T to t.
-    return true.
-  } else {
-    set LAST_T to t.
-    return false.
-  }
-}
-
-// have we experienced a drop in available thrust?
-function stageNeeded {
-  parameter vessel.
-
-  local t is vessel:AVAILABLETHRUST.
-  set TICK to TICK + 1.
-  //print "Tick:" + TICK at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 7).
-  //print "Last:" + ROUND(LAST_T,1) at (TERMINAL:WIDTH - 15,TERMINAL:HEIGHT - 6).
-  //print "Avail:" + ROUND(t,1) at (TERMINAL:WIDTH - 16,TERMINAL:HEIGHT - 5).
   if (t = 0 or t < (LAST_T - 10)) {
     // uh oh, loss of available thrust
     set LAST_T to t.
@@ -136,7 +128,7 @@ function stageNeeded {
 // T-minus countdown
 // param t - T-Minus count starts at t
 // param i - Ingition at T-Minus i - -1 to disable
-// Tmin - min throttle at ignition
+// param Tmin - min throttle at ignition
 // param gt - Gantry stage at T-Minus gt - -1 to disable
 function doCountdown {
   local parameter t,i,Tmin,gt.

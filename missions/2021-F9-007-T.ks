@@ -282,8 +282,3 @@ function predictedRadalt {
   print "predicted:" + ROUND(PREDICTED,1) at (TERMINAL:WIDTH - 20,TERMINAL:HEIGHT - 12).
   return PREDICTED.
 }
-
-function neutraliseRoll {
-  SET STEERINGMANAGER:ROLLPID:KP TO 0. // set roll rate to 0.
-  SET STEERINGMANAGER:ROLLPID:KI TO 0. // set roll rate to 0.
-}
