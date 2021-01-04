@@ -3,9 +3,11 @@ set terminal:width to 60.
 set terminal:height to 60.
 CLEARSCREEN.
 
+local MISSION_ID is "2021-SH-002-T". /// ensure in format YYYY-[F9|FH|SS|SH]-NNN-[T|D|O]
+
 print "#########################".
 print "# KERPERIUM BOOTLOADER  #".
-print "# MISSION 2021-SH-002-T #".
+print "# MISSION " + MISSION_ID + " #".
 print "#########################".
 print " ".
 PRINT "WARNING: ENSURE MECHJEB IS INACTIVE.".
@@ -23,9 +25,9 @@ if ch = "F" { // GO FLIGHT
   // ## CONFIGURE MISSION ##
   // Late loaded to permit pad editing
   copypath("0:/common/Utils", ""). // utils are always available
-  copypath("0:/missions/2021-SH-002-T", ""). // preload the mission
+  copypath("0:/missions/" + MISSION_ID, ""). // preload the mission
   runoncepath("Utils").
-  runoncepath("2021-SH-002-T"). // run the mission
+  runoncepath(MISSION_ID). // run the mission
   print "GO FLIGHT".
     // ## END CONFIGURE MISSION ##
 }
