@@ -19,6 +19,20 @@ local lastPos to latlng(0, 0).
 local lastTime to time:seconds.
 
 // original code by nessus
+function boostbackComplete {
+  declare parameter targetPos.
+  if not addons:tr:hasImpact { return false. }
+  return distance(targetWithOvershoot(targetPos, relativeOvershoots[0]), addons:tr:impactpos) < 0.01.
+}
+
+// original code by nessus
+function boostbackClose {
+  declare parameter targetPos.
+  if not addons:tr:hasImpact { return false. }
+  return distance(targetWithOvershoot(targetPos, relativeOvershoots[0]), addons:tr:impactpos) < 1.
+}
+
+// original code by nessus
 // param targetLandingPos: a latlng for the landing target
 function boostbackSteering {
   declare parameter targetLandingPos,maxPitch.
@@ -30,7 +44,7 @@ function boostbackSteering {
   local difLng to targetPos:lng - impactPos:lng.
 
   local yaw to arcsin(difLat / distance(impactPos, targetPos)).
-  return heading(270 + yaw, max(maxPitch,boostbackPitch)).
+  return heading(270 + yaw, boostbackPitch).
 }
 
 // original code by nessus
@@ -86,7 +100,7 @@ function landingSteering {
   declare parameter height.
 
   if abs(ship:verticalspeed) >= 300 {
-    return lookdirup(-velocity:surface, vcrs(V(0, 1, 0), ship:body:position)).
+    // return lookdirup(-velocity:surface, vcrs(V(0, 1, 0), ship:body:position)).
   }
   if abs(ship:verticalspeed) <= 15{//15 {
     return lookdirup(-ship:body:position, vcrs(V(0, 1, 0), ship:body:position)).

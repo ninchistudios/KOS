@@ -94,6 +94,12 @@ function ascentThrottle {
   return Tmax.
 }
 
+// TODO
+function ascentHeading {
+  parameter tgt_incl.
+  return tgt_incl.
+}
+
 // ascent on a logarithmic path
 // TODO take in a max AoA to minimise aero RUDs
 // param vessel : the vessel being controlled
@@ -101,8 +107,8 @@ function ascentThrottle {
 function ascentPitch {
   parameter vessel.
   // local tp is min(89.9,217.86 - 18.679 * ln(vessel:ALTITUDE)).
-  // log fit({100,89.9},{150000,0.1}) on https://www.wolframalpha.com/input/
-  local tp is min(89.9,-12.2791 * ln(vessel:APOAPSIS * 0.000000661259)).
+  // calc on https://www.wolframalpha.com/input/
+  local tp is min(89.9,-12.2791 * ln(vessel:APOAPSIS * 0.000000661259)). // steep on Kerbin - log fit({100,89.9},{150000,0.1})
   return tp.
 }
 
@@ -183,5 +189,18 @@ function doCountdown {
       doSafeStage().
     }
     WAIT 1.
+  }
+}
+
+// TODO
+//
+function doGridfins {
+  parameter turnOn.
+  if (turnOn) {
+    AG7 on.
+    logMessage(LOGADVISORY,"GRIDFINS OUT").
+  } else {
+    AG7 off.
+    logMessage(LOGADVISORY,"GRIDFINS IN").
   }
 }

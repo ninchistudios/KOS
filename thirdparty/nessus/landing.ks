@@ -6,7 +6,8 @@ global lz1alt to 145.7.
 // global lz1alt to 154.5.
 
 
-global relativeOvershoots to list(0.02, 0.02).
+// global relativeOvershoots to list(0.02, 0.02).
+global relativeOvershoots to list(0, 0).
 global boostbackThrottle to 0.6.
 global reentryThrottle to 0.8.
 
@@ -16,7 +17,7 @@ global reentryCutoffSpeed to 700.
 
 global landingAltitude to 4000.
 //global landingAltitude to 3000.
-global reentryAoA to 5.
+global reentryAoA to 45.
 global boostbackPitch to 10.
 
 
