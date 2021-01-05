@@ -25,7 +25,6 @@ print "# - perform hoverslam at precision location              #".
 print "##########################################################".
 print " ".
 // CONFIGURE FLIGHT
-local ATMO_BOUNDARY is 70000. // where does the atmo end
 local SEP_APO is 70000. // apo at which stage separation occurs - TODO tie to booster fuel vs alt/distance
 local SEP_DELAY is 10. // seconds to wait after staging before boostback
 local TGT_APO is 100000. // target orbit to be circularised
@@ -54,6 +53,7 @@ local LOGGING_ENABLED is true. // log to CSV
 // END CONFIGURE FLIGHT
 
 // CONSTANTS, TUNING AND GLOBALS
+local ATMO_BOUNDARY is 70000. // where does the atmo end - Kerbin 70000
 local BOOSTBACK_READY is false.
 local DESCENT_READY is false.
 local MY_VESSEL is SHIP. // safes against vehicle switch
@@ -81,9 +81,9 @@ if archive:exists("TestFlight.csv") {
 local LOGFILE to archive:create("TestFlight.csv").
 
 // RUN
-doSetup().
-doMain().
-doFinalise().
+doSetup(). // runs once
+doMain(). // runs continuously until exited
+doFinalise(). // runs once
 // -------------------------------
 // FUNCTIONS ONLY BELOW THIS POINT
 
