@@ -3,12 +3,14 @@
 // LANDING ZONES
 // KSC LZ1: Lat -000.032492 Long -074.663904 0 AGL 67m AMSL
 // KSC LZ2: Lat -000.032570 Long -074.642213 0 AGL 67m AMSL
-// KSC FIWLT: Lat -000.149711 Long -074.013484 AGL 741.7 AMSL 0
+// KSC FIWLT: Lat -000.149711 Long -074.013484 AGL 741.7m AMSL 0
+// KSC OCISLY: Lat 0*08'59" S Long 74*00'48" W AGL 744.8m AMSL 2.49m
 
 
 global KSCLZ1 to latlng(-0.032492, -74.663904). // 0 AGL 67m AMSL
 global KSCLZ2 to latlng(-0.032570, -74.642213). // 0 AGL 67m AMSL
 global KSCFIWLT to latlng(-0.149711, -74.013484).// 741.7 AGL 0 AMSL
+global KSCOCISLY to latlng(decimalDegrees(0,8,59,"S"),decimalDegrees(74,0,48,"W")).
 global relativeOvershoots to list(0.02, 0.02).
 global reentryAltitude to 55000.
 global reentryCutoffSpeed to 700.

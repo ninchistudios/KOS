@@ -26,7 +26,7 @@ print "# - perform hoverslam at precision location              #".
 print "##########################################################".
 print " ".
 // CONFIGURE FLIGHT
-LOCAL BARGE_TWEAK IS 0. // Additional AGL to subtract when landing to account for barge collision model weirdness (12? for FIWLT - FIWLT seems broken)
+LOCAL BARGE_TWEAK IS -2.5. // Additional AGL to subtract when landing to account for barge collision model weirdness
 local STRUTS_TWEAK is 0. // Additional AGL to add when landing to account for landing struts.
 local AGL_BARE is 40.1. // AGL of the bare vehicle at launch, without landing struts or a tower platform.
 local SEP_APO is 70000. // apo at which stage separation occurs - TODO tie to booster fuel vs alt/distance
@@ -46,13 +46,13 @@ local TGANTRY is 0. // Gantry at T-Minus... remember to check the staging
 local TIGNITE is 1. // Ignition at T-Minus... remember to check the staging
 local Tmin is 0.1. // minimum throttle setting
 local BOOST_APO is 12000. // after hover, how high should we boost
-local BOOST_MAX_PITCH is 3. // Max pitchover (0 is horizontal) during boostback
+local BOOST_MAX_PITCH is 5. // Max pitchover (0 is horizontal) during boostback
 local DESCENT_MAX_PITCH is 45. // Max pitchover (0 is horizontal) during aero descent
 local HAGL is 250. // TARGET HOVER ALT METERS AGL
 local GAGL is 500. // engage gear below on descent
 local HOW_SUICIDAL is 0.98. // how late do you want to leave the burn? Close to but < 1.0 for max efficiency
 local ENGINE_MODE_FACTOR is 4. // by what factor does thrust reduce changing mode? F9 = 3, SH = 4
-local LZ to KSCLZ1. // where will we land? KSCFIWLT/KSCLZ1/KSCLZ2
+local LZ to KSCOCISLY. // where will we land? KSCOCISLY/KSCLZ1/KSCLZ2
 local TELEMETRY_ENABLED is false. // log to console
 local LOGGING_ENABLED is false. // log to CSV
 // END CONFIGURE FLIGHT

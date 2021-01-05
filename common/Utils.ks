@@ -23,6 +23,18 @@ local CLAMP_POS_PITCH is 15.
 local CLAMP_NEG_PITCH is -89.
 local BLANK_TELEMETRY is "                    ". // 20 char
 
+// TODO
+function decimalDegrees {
+  parameter degs,mins,secs,compass.
+  local dd is degs + (mins / 60) + (secs / 3600).
+  if compass = "S" {
+    set dd to -1 * dd.
+  } else if compass = "W" {
+    set dd to 360 - dd.
+  }
+  return dd.
+}
+
 // wrapper for logConsole, simplified for regular messages
 // param mType : the type of message. 1=advisory, 2=major, 3=error
 // param msg : the message. if telemetry, used as the name value (advise max 8 characters for telemetry)
