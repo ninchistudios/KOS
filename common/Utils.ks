@@ -74,11 +74,11 @@ function hoverSteering {
 
 // returns the true radalt of the base of the vehicle, adjusted for height of the control module
 // TODO this requires a tweak based on the deployment of landing gear
-// param launchRadAlt : the reported radalt at launch
+// param bareRadAlt : the bare radalt without landing struts or launch platforms
 // returns the radalt of the vehicle base
 function baseRadalt {
-  parameter launchRadAlt.
-  return MAX(0.00001,((ALTITUDE-GEOPOSITION:TERRAINHEIGHT)-launchRadAlt)).
+  parameter bareRadAlt.
+  return MAX(0.00001,((ALTITUDE-GEOPOSITION:TERRAINHEIGHT)-bareRadAlt)).
 }
 
 // control the throttle to reduce Q if needed
@@ -177,7 +177,8 @@ function stageNeeded {
 function doCountdown {
   local parameter t,i,Tmin,gt.
   logMessage(LOGADVISORY,"T MINUS").
-  from {local c is t.} until c = 0 step {set c to c - 1.} do {
+  from {local c is t.} until c = -1 step {set c to c - 1.} do {
+    WAIT 1.
     logMessage(LOGADVISORY," ... " + c).
     if (c = gt) {
       logMessage(LOGADVISORY,"GANTRY").
@@ -188,7 +189,6 @@ function doCountdown {
       lock throttle to Tmin.
       doSafeStage().
     }
-    WAIT 1.
   }
 }
 

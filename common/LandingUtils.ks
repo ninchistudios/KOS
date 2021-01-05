@@ -44,7 +44,7 @@ function boostbackSteering {
   local difLng to targetPos:lng - impactPos:lng.
 
   local yaw to arcsin(difLat / distance(impactPos, targetPos)).
-  return heading(270 + yaw, boostbackPitch).
+  return heading(270 + yaw, maxPitch).
 }
 
 // original code by nessus

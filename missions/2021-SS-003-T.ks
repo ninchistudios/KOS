@@ -1,5 +1,6 @@
 // Standard AGs:
-// AG1: Engine mode (F9 9/3/1)
+// AG1: Engine mode (F9 9/3/1 SH 28/7)
+// AG2 Engine Mode 2 (e.g. VTOL)
 // AG6: PV Panels
 // AG7: Grid Fins toggle
 // AG8: Vacuum Accel-safe Modules (e.g. fairings) - safe to do a burn after deployed
@@ -14,62 +15,66 @@ runoncepath("LandingUtils").
 print " ".
 print "##########################################################".
 print "# MISSION: " + MISSION_ID + "                                 #".
-print "# SH PRECISION HOVERSLAM TESTFLIGHT 2                    #".
+print "# SS PRECISION HOVERSLAM TESTFLIGHT 3                    #".
 print "#                                                        #".
 print "# Mission Objective:                                     #".
-print "# - launch on norminal orbital ascent with 270T NRAP     #".
-print "# - separate NRAP at nominal alt                         #".
+print "# - launch on norminal orbital ascent with FUELLED SS    #".
+print "# - separate SS at nominal alt                           #".
 print "# - perform boostback to precision location              #".
 print "# - perform descent guidance to precision location       #".
 print "# - perform hoverslam at precision location              #".
 print "##########################################################".
 print " ".
 // CONFIGURE FLIGHT
+LOCAL BARGE_TWEAK IS 0. // Additional AGL to subtract when landing to account for barge collision model weirdness (12? for FIWLT - FIWLT seems broken)
+local STRUTS_TWEAK is 0. // Additional AGL to add when landing to account for landing struts.
+local AGL_BARE is 40.1. // AGL of the bare vehicle at launch, without landing struts or a tower platform.
 local SEP_APO is 70000. // apo at which stage separation occurs - TODO tie to booster fuel vs alt/distance
-local SEP_DELAY is 10. // seconds to wait after staging before boostback
+local SEP_DELAY is 5. // seconds to wait after staging before boostback
 local TGT_APO is 100000. // target orbit to be circularised
 local TGT_PERI is 90000. // target orbit to be circularised
-local TGT_ASC_ROLL is 270. // do a special ascent roll program stage
+local TGT_ASC_ROLL is 180. // do a special ascent roll program stage
 local TGT_INCL is 90. // guidance heading (not inclination for now)
 local LIMIT_Q is false. // limit Q to terminal velocity? CURRENTLY NONFUNCTIONAL
 local MAX_Q is 40. // If limiting Q, limit to what?
 local FULL_THROTT_OVER is 22000. // hacky way of preventing MECO before boosters
 local EST_CIRC_DV is 2000. // estimated circularisation dV.
 local DO_WARP is true. // set true to physics warp through boring bits
-local WARP_SPEED is 2. // 1/2/3 corresponding to a 2x / 3x / 4x physics warp
+local WARP_SPEED is 3. // 1/2/3 corresponding to a 2x / 3x / 4x physics warp
 local TCOUNT is 3. // T-Minus countdown
-local TGANTRY is -1. // Gantry at T-Minus...
-local TIGNITE is 1. // Ignite at T-Minus...
+local TGANTRY is 0. // Gantry at T-Minus... remember to check the staging
+local TIGNITE is 1. // Ignition at T-Minus... remember to check the staging
 local Tmin is 0.1. // minimum throttle setting
 local BOOST_APO is 12000. // after hover, how high should we boost
-local BOOST_MAX_PITCH is 1. // Max pitchover (90 is vertical) during boostback
-local DESCENT_MAX_PITCH is 70. // Max pitchover (90 is vertical) during aero descent
+local BOOST_MAX_PITCH is 3. // Max pitchover (0 is horizontal) during boostback
+local DESCENT_MAX_PITCH is 45. // Max pitchover (0 is horizontal) during aero descent
 local HAGL is 250. // TARGET HOVER ALT METERS AGL
 local GAGL is 500. // engage gear below on descent
 local HOW_SUICIDAL is 0.98. // how late do you want to leave the burn? Close to but < 1.0 for max efficiency
 local ENGINE_MODE_FACTOR is 4. // by what factor does thrust reduce changing mode? F9 = 3, SH = 4
-local LZ to KSCLZ2. // where will we land?
-local LOGGING_ENABLED is true. // log to CSV
+local LZ to KSCLZ1. // where will we land? KSCFIWLT/KSCLZ1/KSCLZ2
+local TELEMETRY_ENABLED is false. // log to console
+local LOGGING_ENABLED is false. // log to CSV
 // END CONFIGURE FLIGHT
 
 // CONSTANTS, TUNING AND GLOBALS
+local AGL_TWEAK is STRUTS_TWEAK - BARGE_TWEAK.
+local LAUNCH_AMSL is ROUND(ship:ALTITUDE,3). // AMSL of the control module
+local LAUNCH_AGL is ROUND(MAX(0.001,(ALTITUDE-GEOPOSITION:TERRAINHEIGHT)),3). // Launch AGL of the control module - note this is above terrain, so launch platforms won't register
 local ATMO_BOUNDARY is 70000. // where does the atmo end - Kerbin 70000
 local BOOSTBACK_READY is false.
 local DESCENT_READY is false.
 local MY_VESSEL is SHIP. // safes against vehicle switch
 lock MY_Q to MY_VESSEL:Q * constant:ATMtokPa. // dynamic pressure in kPa
-lock TOP_Q to topQ(MY_Q).
+lock TOP_Q to topQ(MY_Q). // the highest Q encountered
 local START_TIME to TIME:SECONDS.
 local LOGGED_PITCH is 0.
 local NEXT_LOG_TIME is TIME:SECONDS + 1.
-local AGL_TWEAK is 1. // hoverslam AGL tweak - a little extra height to account for struts etc
 local HTp is 0.05. // Hover Throttle P
 local HTi is 0.1. // Hover Throttle I
 local HTd is 0.15. // Hover Throttle D
 local HTPID is PIDLOOP(HTp,HTi,HTd,-.1,.05). // adjust last two values for throttle speed
 local AUTOPILOT is true. // program will run until this is switched off
-local LAUNCH_AMSL is ROUND(ship:ALTITUDE,3). // AMSL of the control module
-local LAUNCH_AGL is ROUND(MAX(0.001,(ALTITUDE-GEOPOSITION:TERRAINHEIGHT)),3). // AGL of the control module
 local PREDICTED is 0. // predicted radalt with current accel + vel
 local vAngle is 0. // angle from ship up to surface up
 local Fg is 0. // force of gravity on the ship
@@ -118,7 +123,7 @@ function doFlightTriggers {
               when distanceToGround(LAUNCH_AGL,AGL_TWEAK) < GAGL then {
                 doLandingGear().
 
-                when (ship:status = "LANDED" or AGL < 1) then {
+                when (MY_VESSEL:status = "LANDED" or AGL < 1) then {
                  doTouchDown().
                 }
               }
@@ -198,7 +203,7 @@ function doBoostbackPhase {
 
 function doDescentPhase {
   logMessage(LOGMAJOR,"DESCENT PHASE").
-  if DO_WARP { set warp to 0. }
+  if DO_WARP { set warp to WARP_SPEED. }
   // lock steering to atmosphericDescentSteering(LZ).
   lock steering to landingSteering(LZ,AGL).
   rcs on.
@@ -237,35 +242,39 @@ function doPreservedTriggers {
 }
 
 function doTelemetry {
-  // logConsole parameters mType,msg,val,index.
-  if addons:tr:hasImpact {
-    logConsole(LOGTELEMETRY,"TGTLAT",ROUND(addons:tr:impactpos:LAT,6),10).
-    logConsole(LOGTELEMETRY,"TGTLNG",ROUND(addons:tr:impactpos:LNG,6),9).
+  if TELEMETRY_ENABLED {
+    // logConsole parameters mType,msg,val,index.
+    if addons:tr:hasImpact {
+      // TODO causes issues with landings on barges?
+      //logConsole(LOGTELEMETRY,"TGTLAT",ROUND(addons:tr:impactpos:LAT,6),10).
+      //logConsole(LOGTELEMETRY,"TGTLNG",ROUND(addons:tr:impactpos:LNG,6),9).
+    }
+    logConsole(LOGTELEMETRY,"Q",ROUND(MY_Q,1),8).
+    logConsole(LOGTELEMETRY,"Mass",ROUND(MY_VESSEL:mass,1),7).
+    logConsole(LOGTELEMETRY,"Vv",ROUND(MY_VESSEL:verticalspeed,3),6).
+    logConsole(LOGTELEMETRY,"vAngle",ROUND(vAngle,3),5).
+    logConsole(LOGTELEMETRY,"Fg",ROUND(Fg,3),4).
+    logConsole(LOGTELEMETRY,"AGL",ROUND(AGL, 1),3).
+    logConsole(LOGTELEMETRY,"AMSL",ROUND(MY_VESSEL:ALTITUDE - LAUNCH_AGL,3),2).
+    logConsole(LOGTELEMETRY,"SLAMT",ROUND(SLAM_THROTT, 3),1).
   }
-  logConsole(LOGTELEMETRY,"Q",ROUND(MY_Q,1),8).
-  logConsole(LOGTELEMETRY,"Mass",ROUND(ship:mass,1),7).
-  logConsole(LOGTELEMETRY,"Vv",ROUND(ship:verticalspeed,3),6).
-  logConsole(LOGTELEMETRY,"vAngle",ROUND(vAngle,3),5).
-  logConsole(LOGTELEMETRY,"Fg",ROUND(Fg,3),4).
-  logConsole(LOGTELEMETRY,"AGL",ROUND(AGL, 1),3).
-  logConsole(LOGTELEMETRY,"AMSL",ROUND(ship:ALTITUDE - LAUNCH_AGL,3),2).
-  logConsole(LOGTELEMETRY,"SLAMT",ROUND(SLAM_THROTT, 3),1).
 }
 
 // runs once at the start of the script
 function doSetup {
   neutraliseRoll().
   set HTPID:SETPOINT TO HAGL.
-  lock vAngle to VANG(ship:facing:forevector, ship:up:forevector).
+  lock vAngle to VANG(MY_VESSEL:facing:forevector, MY_VESSEL:up:forevector).
   lock Fg to (body:mu / body:radius^2) * mass.
-  lock AGL to baseRadalt(LAUNCH_AGL).
-  lock SLAM_THROTT to min (1, stoppingDistance() / distanceToGround(LAUNCH_AGL,AGL_TWEAK)).
+  lock AGL to baseRadalt(AGL_BARE).
+  lock SLAM_THROTT to min (1, stoppingDistance() / distanceToGround(AGL_BARE,AGL_TWEAK)).
   set kuniverse:TimeWarp:MODE to "PHYSICS".
   // surface key flight data that is mission-agnostic
   logMessage(LOGADVISORY,"Launch AMSL: " + LAUNCH_AMSL + "m").
   logMessage(LOGADVISORY,"Launch AGL: " + LAUNCH_AGL + "m").
-  logMessage(LOGADVISORY,"Wet Mass: " + ROUND(ship:wetmass,1) + "T").
-  logMessage(LOGADVISORY,"Dry Mass: " + ROUND(ship:drymass,1) + "T").
+  logMessage(LOGADVISORY,"Hardware AGL: " + AGL_BARE + "m").
+  logMessage(LOGADVISORY,"Wet Mass: " + ROUND(MY_VESSEL:wetmass,1) + "T").
+  logMessage(LOGADVISORY,"Dry Mass: " + ROUND(MY_VESSEL:drymass,1) + "T").
   if ADDONS:TR:AVAILABLE {
       logMessage(LOGADVISORY,"Trajectories available - OK").
   } else {
@@ -293,7 +302,7 @@ function doMain {
 function doFinalise {
   lock THROTTLE to 0.
   // TODO clear flightplan
-  set ship:control:neutralize to true.
+  set MY_VESSEL:control:neutralize to true.
   logMessage(LOGMAJOR,"PROGRAM COMPLETE").
   until false {
     wait 1.
