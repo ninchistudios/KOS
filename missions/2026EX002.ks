@@ -46,7 +46,7 @@ local MY_VESSEL is SHIP.
 lock MY_Q to MY_VESSEL:Q * constant:ATMtokPa.
 lock TOP_Q to topQ(MY_Q).
 // great-circle surface distance from launch site in metres
-lock DOWNRANGE to body:radius * VANG(
+lock DOWNRANGE to MY_VESSEL:BODY:RADIUS * VANG(
   LAUNCH_GEO:ALTITUDEPOSITION(0),
   MY_VESSEL:GEOPOSITION:ALTITUDEPOSITION(0)
 ) * constant:degtorad.
@@ -208,7 +208,8 @@ function doFinalise {
 }
 
 function logTelemetry {
-  set LOGGED_PITCH to MY_VESSEL:facing:pitch.
+  // log pitch above local horizon (90 = straight up, 0 = horizon)
+  set LOGGED_PITCH to 90 - VANG(MY_VESSEL:FACING:FOREVECTOR, MY_VESSEL:UP:FOREVECTOR).
   log
     (TIME:SECONDS - START_TIME)
     + ","
