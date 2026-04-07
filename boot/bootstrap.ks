@@ -1,7 +1,7 @@
 WAIT UNTIL SHIP:UNPACKED.
-// CORE:PART:GETMODULE("kOSProcessor"):DOEVENT("Open Terminal").
-// set terminal:width to 60.
-// set terminal:height to 60.
+CORE:PART:GETMODULE("kOSProcessor"):DOEVENT("Open Terminal").
+set terminal:width to 60.
+set terminal:height to 60.
 CLEARSCREEN.
 
 // ensure in format YYYY[XP|F9|FH|SS|SH]NNN[T|S|D|I]
@@ -18,7 +18,7 @@ global MISSION_ID is "2026EX002".
 
 print "#########################".
 print "# KERPERIUM BOOTLOADER  #".
-print "# MISSION " + MISSION_ID + " #".
+print "# MISSION " + MISSION_ID + "     #".
 print "#########################".
 print " ".
 PRINT "WARNING: ENSURE MECHJEB IS INACTIVE.".
