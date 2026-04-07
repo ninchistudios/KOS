@@ -114,23 +114,27 @@ function ascentHeading {
 
 // ascent on a logarithmic path
 // TODO take in a max AoA to minimise aero RUDs
-// param vessel : the vessel being controlled
+// param vess : the vessel being controlled
 // returns tp : the instantaneous target pitch to achieve the ascent profile
+// Curve fitted for RSS Earth ascent to ~200 km circular orbit.
+// Approximate profile: ~89° at apo<10km, ~69° at 20km, ~42° at 50km, ~27° at 80km, ~15° at 120km, ~7° at 160km, 0° at 200km.
+// To retarget: set C = 1 / target_apoapsis_in_metres (e.g. 0.000004 for 250km).
+// Ref: log fit({10000,89.9},{200000,0}), A=30, C=0.000005
+// Previous Kerbin curve: -12.2791 * ln(vessel:APOAPSIS * 0.000000661259)
 function ascentPitch {
-  parameter vessel.
-  // local tp is min(89.9,217.86 - 18.679 * ln(vessel:ALTITUDE)).
-  // calc on https://www.wolframalpha.com/input/
-  local tp is min(89.9,-12.2791 * ln(vessel:APOAPSIS * 0.000000661259)). // steep on Kerbin - log fit({100,89.9},{150000,0.1})
-  return tp.
+  parameter vess.
+  if vess:APOAPSIS <= 0 { return 89.9. }
+  local tp is min(89.9,-30 * ln(vess:APOAPSIS * 0.000005)). // RSS/RO - log fit for 200km target
+  return max(0, tp).
 }
 
-// vacuum accel-safe deployments (e.g. fairings) should be set to AG1
+// vacuum accel-safe deployments (e.g. fairings) should be set to AG8
 function deployAccelSafe {
   AG8 ON.
   logMessage(LOGADVISORY,"ACCEL-SAFE MODULES DEPLOYED").
 }
 
-// vacuum orbit-safe deployments (e.g. science) should be set to AG2
+// vacuum orbit-safe deployments (e.g. science) should be set to AG9
 function deployOrbitSafe {
   AG9 ON.
   logMessage(LOGADVISORY,"ORBIT-SAFE MODULES DEPLOYED").
@@ -162,14 +166,14 @@ function doStageDelay {
 
 // have we experienced a drop in available thrust, and thus staging needed?
 // potentially problematic with multi-mode engines (e.g. on F9)
-// parameter vessel : the vessel to be checked
+// parameter vess : the vessel to be checked
 // returns bool : is a stage needed
 function stageNeeded {
-  parameter vessel.
+  parameter vess.
   if TIME:SECONDS < NO_STAGE_BEFORE {
     return false.
   }
-  local t is vessel:AVAILABLETHRUST.
+  local t is vess:AVAILABLETHRUST.
   set TICK to TICK + 1.
   if (t = 0 or t < (LAST_T - 10)) {
     // uh oh, loss of available thrust
