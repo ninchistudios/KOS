@@ -47,8 +47,8 @@ lock MY_Q to MY_VESSEL:Q * constant:ATMtokPa.
 lock TOP_Q to topQ(MY_Q).
 // great-circle surface distance from launch site in metres
 lock DOWNRANGE to MY_VESSEL:BODY:RADIUS * VANG(
-  LAUNCH_GEO:ALTITUDEPOSITION(0),
-  MY_VESSEL:GEOPOSITION:ALTITUDEPOSITION(0)
+  LAUNCH_GEO:POSITION - MY_VESSEL:body:position,
+  MY_VESSEL:position - MY_VESSEL:body:position
 ) * constant:degtorad.
 local START_TIME to TIME:SECONDS.
 local LOGGED_PITCH is 0.
