@@ -11,7 +11,7 @@
 
 print " ".
 print "##########################################################".
-print "# MISSION: " + MISSION_ID + "                      #".
+print "# MISSION: " + MISSION_ID + "                                      #".
 print "# EX Downrange Distance LV                               #".
 print "#                                                        #".
 print "# Mission Objective:                                     #".
@@ -26,13 +26,15 @@ local AGL_BARE is 16.0. // AGL of the bare vehicle at launch - adjust to match y
 local TGT_APO is 145000. // target apoapsis - min 140km per contract
 local TGT_HEADING is 270. // compass heading toward downrange target
 local TGT_PITCH is 70. // pitch above horizon during ascent phase (90=vertical, lower=more downrange)
-local PITCH_START_ALT is 3000. // altitude at which to begin pitch program
+local PITCH_START_ALT is 1000. // altitude at which to begin pitch program
+local DESCENT_START_ALT is 140000. // apply descent attitude below this altitude (top of effective atmosphere)
+local DESCENT_PITCH is -75. // descent pitch above horizon
 local MIN_AVIONICS_TIME is 55. // minimum avionics duration in seconds (contract requires 50s; 55s adds margin)
 local DO_WARP is false. // set true to physics warp through boring bits
 local WARP_SPEED is 3. // 1/2/3 corresponding to 2x/3x/4x physics warp
-local TCOUNT is 5. // T-Minus countdown
-local TGANTRY is 0. // Gantry/clamp release at T-0
-local TIGNITE is 3. // Ignition at T-3
+local TCOUNT is 7. // T-Minus countdown
+local TGANTRY is 0. // Gantry/clamp release at T-
+local TIGNITE is 5. // Ignition at T-
 local Tmin is 0.1. // minimum throttle at ignition
 local TELEMETRY_ENABLED is true. // log to console
 local LOGGING_ENABLED is true. // log to CSV
@@ -139,6 +141,11 @@ function doMECO {
   }
   lock steering to up.
   logMessage(LOGADVISORY,"BALLISTIC COAST").
+  // once descending and back under top-of-atmo, hold configured downrange attitude
+  when (MY_VESSEL:VERTICALSPEED < 0 and MY_VESSEL:ALTITUDE <= DESCENT_START_ALT) then {
+    logMessage(LOGADVISORY,"DESCENT ATTITUDE - HDG " + TGT_HEADING + " PITCH " + DESCENT_PITCH + " BELOW " + ROUND(DESCENT_START_ALT/1000,0) + "KM").
+    lock steering to heading(TGT_HEADING, DESCENT_PITCH).
+  }
 }
 
 function doTouchDown {
