@@ -11,7 +11,7 @@
 
 print " ".
 print "##########################################################".
-print "# MISSION: " + MISSION_ID + "                                      #".
+print "# MISSION: " + MISSION_ID + "                                     #".
 print "# EX Downrange Distance LV                               #".
 print "#                                                        #".
 print "# Mission Objective:                                     #".
