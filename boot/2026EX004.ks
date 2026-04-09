@@ -14,7 +14,7 @@ CLEARSCREEN.
 // S: Suborbital
 // O: Orbital
 // I: Interplanetary
-global MISSION_ID is "2026EX002". 
+global MISSION_ID is "2026EX004". 
 
 print "#########################".
 print "# KERPERIUM BOOTLOADER  #".

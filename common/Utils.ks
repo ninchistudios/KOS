@@ -192,10 +192,27 @@ function stageNeeded {
 // param gt - Gantry stage at T-Minus gt - -1 to disable
 function doCountdown {
   local parameter t,i,Tmin,gt.
+  doCountdownWithThrottle(t,i,Tmin,gt,-1).
+}
+
+// T-minus countdown with optional full-throttle handoff point
+// param t - T-Minus count starts at t
+// param i - Ignition at T-Minus i - -1 to disable
+// param Tmin - min throttle at ignition
+// param gt - Gantry stage at T-Minus gt - -1 to disable
+// param tf - set throttle to full at T-Minus tf - -1 to disable
+function doCountdownWithThrottle {
+  local parameter t,i,Tmin,gt,tf.
+  local throttlePrimed is false.
   logMessage(LOGADVISORY,"T MINUS").
   from {local c is t.} until c = -1 step {set c to c - 1.} do {
     WAIT 1.
     logMessage(LOGADVISORY," ... " + c).
+    if (i <> -1 and not throttlePrimed and c = (i + 1)) {
+      lock throttle to Tmin.
+      logMessage(LOGADVISORY,"THROTTLE PRIMED TO " + Tmin).
+      set throttlePrimed to true.
+    }
     if (c = gt) {
       logMessage(LOGADVISORY,"GANTRY").
       doSafeStage().
@@ -204,6 +221,10 @@ function doCountdown {
       logMessage(LOGADVISORY,"IGNITION").
       lock throttle to Tmin.
       doSafeStage().
+    }
+    if (c = tf and (i = -1 or c < i)) {
+      logMessage(LOGADVISORY,"FULL THROTTLE").
+      lock throttle to 1.
     }
   }
 }
@@ -219,4 +240,29 @@ function doGridfins {
     AG7 off.
     logMessage(LOGADVISORY,"GRIDFINS IN").
   }
+}
+
+function currentMETSeconds {
+  return ROUND(TIME:SECONDS - START_TIME, 1).
+}
+
+function currentMETFormatDHMS {
+  local met is currentMETSeconds().
+  local d is FLOOR(met / 86400).
+  local h is FLOOR((met - (d * 86400)) / 3600).
+  local m is FLOOR((met - (d * 86400) - (h * 3600)) / 60).
+  local s is ROUND(met - (d * 86400) - (h * 3600) - (m * 60),1).
+  return d + "d " + h + "h " + m + "m " + s + "s".
+}
+
+function getResourceAmount {
+  parameter resourceName.
+  local resList is list().
+  list resources in resList.
+  for res in resList {
+    if res:NAME = resourceName {
+      return res:AMOUNT.
+    }
+  }
+  return 0.
 }

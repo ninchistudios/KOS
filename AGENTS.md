@@ -1,6 +1,6 @@
 # About
 
-These are kOS scripts for a 2026 new KSP RSS RO RP-1 career mode playthrough.
+These are kOS scripts for a 2026 KSP RSS RO RP-1 career mode playthrough.
 
 # Principles
 
