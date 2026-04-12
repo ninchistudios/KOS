@@ -11,14 +11,13 @@
 
 print " ".
 print "##########################################################".
-print "# MISSION: 2026EX004                                     #".
-print "# Contract: Suborbital Research - Camera (Uncrewed)      #".
+print "# MISSION: 2026EX005                                     #".
+print "# Contract: Suborbital Research - Biological (Uncrewed)  #".
 print "#                                                        #".
 print "# Mission Objective:                                     #".
 print "# - min 100km altitude                                   #".
 print "# - Suborbital trajectory                                #".
 print "# - return safely                                        #".
-print "# - min 200km downrange                                  #".
 print "# - don't RUD                                            #".
 print "##########################################################".
 print " ".
@@ -27,7 +26,7 @@ print " ".
 local AGL_BARE is 17.7. // AGL of the bare vehicle at launch - adjust to match your rocket
 local CUT_APO is 200000. // MECO if we exceed this apoapsis
 local TGT_HEADING is 270. // compass heading after launch
-local TGT_PITCH is 30. // pitch above horizon during ascent phase (90=vertical, lower=more downrange)
+local TGT_PITCH is 89.9. // pitch above horizon during ascent phase (90=vertical, lower=more downrange)
 local PITCH_START_ALT is 1000. // altitude at which to begin pitch program
 local PITCH_RATE_DPS is 1.0. // pitch rate for smooth transition from 90 to TGT_PITCH (degrees per second)
 local APO_HOLD_LOW_FRAC is 1.05. // lower bound of apo hold band as fraction of MISSION_MIN_APO
@@ -54,7 +53,7 @@ local DEPLOY_ACCEL_SAFE_Q is 0. // max Q (kPa) for AG8 deployment
 local ENGINE_NOMINAL_BURN is 83.0. // seconds of nominal burn time for the main engine - calibrate during testflights
 local MISSION_MIN_APO is 100000. // apoapsis
 local MISSION_MIN_AVIONICSTIME is 50. // minimum avionics duration in seconds
-local MISSION_MIN_DOWNRANGE is 200000. // minimum downrange distance in meters
+local MISSION_MIN_DOWNRANGE is 1. // minimum downrange distance in meters
 local MISSION_GOAL_SAFELANDING is false.
 local MISSION_GOAL_MINAPO is false.
 local MISSION_GOAL_SUBORBITAL is true.

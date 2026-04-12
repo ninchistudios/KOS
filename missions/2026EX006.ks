@@ -11,55 +11,62 @@
 
 print " ".
 print "##########################################################".
-print "# MISSION: 2026EX004                                     #".
-print "# Contract: Suborbital Research - Camera (Uncrewed)      #".
+print "# MISSION: 2026EX006                                     #".
+print "# Contract: Downrange Milestone (3000km)                 #".
 print "#                                                        #".
 print "# Mission Objective:                                     #".
-print "# - min 100km altitude                                   #".
+print "# - min 140km altitude                                   #".
 print "# - Suborbital trajectory                                #".
-print "# - return safely                                        #".
-print "# - min 200km downrange                                  #".
+print "# - min 50s Avionics Time                                #".
+print "# - 3,000 km downrange                                   #".
 print "# - don't RUD                                            #".
 print "##########################################################".
 print " ".
 // CONFIGURE FLIGHT
 // Do not include mission specifics in comments, these will be reused and are self-evident
 local AGL_BARE is 17.7. // AGL of the bare vehicle at launch - adjust to match your rocket
-local CUT_APO is 200000. // MECO if we exceed this apoapsis
+local CUT_APO is 999999999. // MECO if we exceed this apoapsis
 local TGT_HEADING is 270. // compass heading after launch
-local TGT_PITCH is 30. // pitch above horizon during ascent phase (90=vertical, lower=more downrange)
+local TGT_PITCH is 45. // pitch above horizon during ascent phase (90=vertical, lower=more downrange)
 local PITCH_START_ALT is 1000. // altitude at which to begin pitch program
-local PITCH_RATE_DPS is 1.0. // pitch rate for smooth transition from 90 to TGT_PITCH (degrees per second)
+local PITCH_RATE_DPS is 1.2. // pitch rate for smooth transition from 90 to TGT_PITCH (degrees per second)
+local SPIN_STAB_RATE is 1.0. // raw roll command after pitch stabilises for spin mode (-1..1, clamped)
+local SPIN_STAB_START_ALT is 24000. // minimum altitude before enabling spin stabilisation after max-Q
+local SPIN_PITCH_TOL_DEG is 1.0. // allowed pitch error around TGT_PITCH before entering raw spin mode
+local SPIN_PITCH_STABLE_SEC is 0.7. // pitch must stay within tolerance for this long before raw spin starts
 local APO_HOLD_LOW_FRAC is 1.05. // lower bound of apo hold band as fraction of MISSION_MIN_APO
 local APO_HOLD_HIGH_FRAC is 1.10. // upper bound of apo hold band as fraction of MISSION_MIN_APO
-local APO_HOLD_PITCH_RATE_DPS is 3. // pitch adjustment rate while holding apo band (degrees per second)
+local APO_HOLD_PITCH_RATE_DPS is 2. // pitch adjustment rate while holding apo band (degrees per second)
 local APO_HOLD_MIN_PITCH is 20. // minimum pitch during downrange optimisation
 local APO_HOLD_MAX_PITCH is 85. // maximum pitch during apo hold corrections
+local APO_HOLD_ENABLED is false. // set true to enable automatic pitch adjustments to maintain apoapsis band once MISSION_MIN_APO is reached
 local DESCENT_START_ALT is 140000. // apply descent attitude below this altitude
 local CHUTE_STAGE_ALT is 100000. // stage chutes after aerobraking
 local DESCENT_PITCH is -5. // descent pitch above horizon
 local DO_WARP is false. // set true to physics warp through boring bits
 local WARP_SPEED is 3. // 1/2/3 corresponding to 2x/3x/4x physics warp
-local TCOUNT is 7. // Tminus countdown start
-local TIGNITE is 5. // Ignition at Tminus (at Tmin throttle)
+local TCOUNT is 5. // Tminus countdown start
+local TIGNITE is 3. // Ignition at Tminus (at Tmin throttle)
 local TTHROTTLE is 1. // Tminus for full throttle
 local TGANTRY is 0. // Gantry/clamp release at Tminus
-local Tmin is 0.32. // minimum throttle at ignition
-local TELEMETRY_ENABLED is false. // log to console
+local Tmin is 1.0. // minimum throttle at ignition
+local TELEMETRY_ENABLED is true. // log to console
 local LOGGING_ENABLED is false. // log to CSV (archive access required)
 local DEPLOY_ACCEL_SAFE is true. // deploy AG8 modules once atmo drag is no longer a factor
 local DEPLOY_ACCEL_SAFE_ALT is 100000. // min altitude for AG8 deployment
 local DEPLOY_ACCEL_SAFE_Q is 0. // max Q (kPa) for AG8 deployment
+local STAGE1_FUEL_RESOURCE is "Ethanol90". // stage-1 propellant resource used for hotstage trigger
+local STAGE1_HOTSTAGE_FUEL_REMAINING is 200.0. // hotstage when remaining STAGE1_FUEL_RESOURCE is at or below this amount
+local STAGE_ULLAGE_SETTLE_TIME is 0.1. // minimum delay between hotstage and subsequent separation staging
 // Mission parameters for success tracking
-local ENGINE_NOMINAL_BURN is 83.0. // seconds of nominal burn time for the main engine - calibrate during testflights
-local MISSION_MIN_APO is 100000. // apoapsis
+local MISSION_MIN_APO is 140000. // apoapsis
 local MISSION_MIN_AVIONICSTIME is 50. // minimum avionics duration in seconds
-local MISSION_MIN_DOWNRANGE is 200000. // minimum downrange distance in meters
-local MISSION_GOAL_SAFELANDING is false.
+local MISSION_MIN_DOWNRANGE is 3000000. // minimum downrange distance in meters
 local MISSION_GOAL_MINAPO is false.
 local MISSION_GOAL_SUBORBITAL is true.
 local MISSION_GOAL_AVIONICSTIME is false.
 local MISSION_GOAL_DOWNRANGE is false.
+local MISSION_GOAL_NORUD is true.
 // END CONFIGURE FLIGHT
 
 // CONSTANTS AND GLOBALS
@@ -86,7 +93,16 @@ local MAX_ALTITUDE is 0.
 local ASCENT_GUIDANCE_ACTIVE is false.
 local APO_HOLD_ACTIVE is false.
 local ASCENT_TARGET_PITCH is 90.
+local ASCENT_TARGET_ROLL is 0.
 local LAST_GUIDANCE_T is TIME:SECONDS.
+local STAGE1_HOTSTAGE_DONE is false.
+local STAGE2_SEPARATION_DONE is false.
+local SPIN_STAB_ACTIVE is false.
+local MAXQ_PASSED is false.
+local STAGE1_FUEL_START is -1.
+local SPIN_RAW_MODE_ACTIVE is false.
+local SPIN_STABLE_PITCH_SINCE is -1.
+local MISSION_RESULTS_REPORTED is false.
 local MYLOGFILE is "".
 
 // RUN
@@ -109,7 +125,7 @@ function doFlightTriggers {
       doAscentPhase().
 
       // burnout or risking unplanned orbit - cut engines
-      when (stageNeeded(MY_VESSEL) or MY_VESSEL:periapsis > 0 or MY_VESSEL:APOAPSIS > CUT_APO) then {
+      when (STAGE2_SEPARATION_DONE and (stageNeeded(MY_VESSEL) or MY_VESSEL:periapsis > 0 or MY_VESSEL:APOAPSIS > CUT_APO)) then {
         doMECO().
 
         // ballistic coast - wait for impact
@@ -123,19 +139,17 @@ function doFlightTriggers {
 
 function doMissionGoals {
 
-  // safe landing
-  when (MY_VESSEL:status = "LANDED" or MY_VESSEL:status = "SPLASHED") THEN {
-    if (MY_VESSEL:VERTICALSPEED < 6) {
-      set MISSION_GOAL_SAFELANDING to true.
-      logMessage(LOGADVISORY,"Mission Goal Achieved: Safe Landing").
-    }
+  // detect disassembly
+  when MY_VESSEL:status = "DEAD" THEN {
+    set MISSION_GOAL_NORUD to false.
+    logMessage(LOGERROR,"Mission Goal Failed: Vehicle Destroyed").
   }
+
   // downrange distance
-  when (MY_VESSEL:status = "LANDED" or MY_VESSEL:status = "SPLASHED") THEN {
-    if DOWNRANGE >= MISSION_MIN_DOWNRANGE {
-      set MISSION_GOAL_DOWNRANGE to true.
-      logMessage(LOGADVISORY,"Mission Goal Achieved: Min Downrange").
-    }
+  when (not MISSION_GOAL_DOWNRANGE and DOWNRANGE >= MISSION_MIN_DOWNRANGE) THEN {
+    set MISSION_GOAL_DOWNRANGE to true.
+    logMessage(LOGADVISORY,"Mission Goal Achieved: Min Downrange").
+    doMissionOutcomeReport().
   }
   // minimum apoapsis
   when MY_VESSEL:altitude >= MISSION_MIN_APO THEN {
@@ -162,17 +176,28 @@ function doMissionGoals {
 
 }
 
+function doMissionOutcomeReport {
+  if MISSION_RESULTS_REPORTED {
+    return.
+  }
+  set MISSION_RESULTS_REPORTED to true.
+  logMessage(LOGMAJOR,"MISSION OUTCOME READY - FINALISING WITHOUT TOUCHDOWN").
+  set AUTOPILOT to false.
+}
+
 function doTowerPhase {
   logMessage(LOGMAJOR,"TOWER PHASE").
   logMessage(LOGADVISORY, "Target Heading: " + TGT_HEADING + " / Ascent Pitch: " + TGT_PITCH).
   logMessage(LOGADVISORY, "Pitch Program Alt: " + PITCH_START_ALT/1000 + "km").
-  if (LOGGING_ENABLED) {
+  if (LOGGING_ENABLED and MYLOGFILE <> "") {
     log logpid() + ",,,," to MYLOGFILE.
     log "MET,ALT,PITCH,Q,APO,DOWNRANGE" to MYLOGFILE.
   }
   doCountdownWithThrottle(TCOUNT, TIGNITE, Tmin, TGANTRY, TTHROTTLE).
   lock throttle to towerThrottle().
   logMessage(LOGADVISORY,"LIFTOFF").
+  set STAGE1_FUEL_START to getResourceAmount(STAGE1_FUEL_RESOURCE).
+  logMessage(LOGADVISORY,"Stage1 " + STAGE1_FUEL_RESOURCE + " at liftoff: " + ROUND(STAGE1_FUEL_START,1)).
   lock steering to up.
   wait 1.
   rcs off.
@@ -192,7 +217,21 @@ function doAscentPhase {
 
   // alert through max Q
   when TOP_Q > (MY_Q + 1) THEN {
+    set MAXQ_PASSED to true.
     logMessage(LOGADVISORY,"THROUGH MAX Q " + ROUND(TOP_Q,1) + " KPA AT " + ROUND(MY_VESSEL:ALTITUDE / 1000,1) + " KM").
+    if MY_VESSEL:ALTITUDE >= SPIN_STAB_START_ALT {
+      set SPIN_STAB_ACTIVE to true.
+      set SPIN_STABLE_PITCH_SINCE to -1.
+      logMessage(LOGADVISORY,"SPIN MODE ARMED @ RAW ROLL " + SPIN_STAB_RATE).
+    } else {
+      logMessage(LOGADVISORY,"SPIN STAB DEFERRED UNTIL " + ROUND(SPIN_STAB_START_ALT/1000,1) + " KM").
+    }
+  }
+
+  when (MAXQ_PASSED and not SPIN_STAB_ACTIVE and MY_VESSEL:ALTITUDE >= SPIN_STAB_START_ALT) THEN {
+    set SPIN_STAB_ACTIVE to true.
+    set SPIN_STABLE_PITCH_SINCE to -1.
+    logMessage(LOGADVISORY,"SPIN MODE ARMED @ RAW ROLL " + SPIN_STAB_RATE).
   }
 
   // vertical until PITCH_START_ALT, then begin smooth pitch program
@@ -204,11 +243,21 @@ function doAscentPhase {
   }
 
   // once minimum mission apoapsis is reached, hold 5-10% above it and bias pitch lower for downrange
-  when MY_VESSEL:APOAPSIS >= MISSION_MIN_APO THEN {
+  when (APO_HOLD_ENABLED and MY_VESSEL:APOAPSIS >= MISSION_MIN_APO) THEN {
     if not APO_HOLD_ACTIVE {
       set APO_HOLD_ACTIVE to true.
       logMessage(LOGADVISORY,"Apo Hold Active - keeping apo between " + ROUND((MISSION_MIN_APO * APO_HOLD_LOW_FRAC)/1000,1) + " and " + ROUND((MISSION_MIN_APO * APO_HOLD_HIGH_FRAC)/1000,1) + " km").
     }
+  }
+
+  // hotstage into stage 2 when stage-1 propellant falls to configured remaining amount
+  when (not STAGE1_HOTSTAGE_DONE and STAGE1_FUEL_START > 0 and getResourceAmount(STAGE1_FUEL_RESOURCE) <= STAGE1_HOTSTAGE_FUEL_REMAINING) then {
+    doStage1Hotstage().
+  }
+
+  // separate the now-spent second stage and release the unguided upper stage
+  when (STAGE1_HOTSTAGE_DONE and not STAGE2_SEPARATION_DONE and stageNeeded(MY_VESSEL)) then {
+    doStage2Separation().
   }
 
   when getResourceAmount("ELECTRICCHARGE") < 0.1 THEN {
@@ -220,14 +269,15 @@ function doMECO {
   logMessage(LOGMAJOR,"MECO").
   if DO_WARP { set warp to 0. }
   lock throttle to 0.
+  set SHIP:CONTROL:ROLL to 0.
+  set SPIN_RAW_MODE_ACTIVE to false.
   set ASCENT_GUIDANCE_ACTIVE to false.
   set APO_HOLD_ACTIVE to false.
+  set SPIN_STAB_ACTIVE to false.
   local met is ROUND(TIME:SECONDS - START_TIME, 1).
   logMessage(LOGADVISORY,"BURNOUT MET+" + met + "s / DOWNRANGE " + ROUND(DOWNRANGE/1000,1) + "km").
-  if (met < ENGINE_NOMINAL_BURN or MY_VESSEL:APOAPSIS < MISSION_MIN_APO) {
-    logMessage(LOGERROR,"ENGINE OUT OF NOMINAL").
-  } else {
-    logMessage(LOGADVISORY,"ENGINE BURN NOMINAL").
+  if MY_VESSEL:APOAPSIS < MISSION_MIN_APO {
+    logMessage(LOGERROR,"APOAPSIS BELOW TARGET").
   }
   
   lock steering to up.
@@ -246,6 +296,32 @@ function doMECO {
       logMessage(LOGADVISORY,"GOOD CHUTE").
     }
   }
+}
+
+function doStage1Hotstage {
+  if STAGE1_HOTSTAGE_DONE {
+    return.
+  }
+  local stage1FuelRemaining is ROUND(getResourceAmount(STAGE1_FUEL_RESOURCE), 1).
+  logMessage(LOGMAJOR,"STAGE 1 HOTSTAGE").
+  logMessage(LOGADVISORY,"Stage1 " + STAGE1_FUEL_RESOURCE + " remaining: " + stage1FuelRemaining).
+  lock throttle to 1.
+  logMessage(LOGADVISORY,"THROTTLE HOLD 1.0 FOR STAGE 2 IGNITION").
+  doSafeStage().
+  doStageDelay(STAGE_ULLAGE_SETTLE_TIME).
+  set STAGE1_HOTSTAGE_DONE to true.
+}
+
+function doStage2Separation {
+  if STAGE2_SEPARATION_DONE {
+    return.
+  }
+  logMessage(LOGMAJOR,"STAGE 2 SEPARATION").
+  lock throttle to 1.
+  logMessage(LOGADVISORY,"THROTTLE HOLD 1.0 FOR UPPER STAGE").
+  doSafeStage().
+  set STAGE2_SEPARATION_DONE to true.
+  set ASCENT_GUIDANCE_ACTIVE to false.
 }
 
 function doTouchDown {
@@ -290,7 +366,54 @@ function doAscentGuidance {
     set ASCENT_TARGET_PITCH to MAX(TGT_PITCH, ASCENT_TARGET_PITCH - step).
   }
 
-  lock steering to heading(TGT_HEADING, ASCENT_TARGET_PITCH).
+  if SPIN_STAB_ACTIVE {
+    local pitchErr is ABS(currentPitchDeg() - TGT_PITCH).
+
+    if not SPIN_RAW_MODE_ACTIVE {
+      lock steering to heading(TGT_HEADING, ASCENT_TARGET_PITCH, ASCENT_TARGET_ROLL).
+
+      if pitchErr <= SPIN_PITCH_TOL_DEG {
+        if SPIN_STABLE_PITCH_SINCE < 0 {
+          set SPIN_STABLE_PITCH_SINCE to TIME:SECONDS.
+        } else if (TIME:SECONDS - SPIN_STABLE_PITCH_SINCE) >= SPIN_PITCH_STABLE_SEC {
+          activateRawSpin().
+        }
+      } else {
+        set SPIN_STABLE_PITCH_SINCE to -1.
+      }
+      return.
+    }
+
+    lock steering to heading(TGT_HEADING, TGT_PITCH).
+
+    set SHIP:CONTROL:ROLL to clampUnit(SPIN_STAB_RATE).
+    return.
+  }
+
+  if SPIN_RAW_MODE_ACTIVE {
+    set SHIP:CONTROL:ROLL to 0.
+    set SPIN_RAW_MODE_ACTIVE to false.
+  }
+
+  lock steering to heading(TGT_HEADING, ASCENT_TARGET_PITCH, ASCENT_TARGET_ROLL).
+}
+
+function currentPitchDeg {
+  return 90 - VANG(MY_VESSEL:FACING:FOREVECTOR, MY_VESSEL:UP:FOREVECTOR).
+}
+
+function clampUnit {
+  parameter x.
+  if x > 1 { return 1. }
+  if x < -1 { return -1. }
+  return x.
+}
+
+function activateRawSpin {
+  lock steering to heading(TGT_HEADING, TGT_PITCH).
+  set SHIP:CONTROL:ROLL to clampUnit(SPIN_STAB_RATE).
+  set SPIN_RAW_MODE_ACTIVE to true.
+  logMessage(LOGADVISORY,"RAW SPIN ACTIVE - ROLL " + clampUnit(SPIN_STAB_RATE)).
 }
 
 function doTelemetry {
@@ -315,6 +438,8 @@ function doSetup {
       archive:delete("TestFlight.csv").
     }
     set MYLOGFILE to archive:create("TestFlight.csv").
+  } else {
+    set MYLOGFILE to "".
   }
   logMessage(LOGADVISORY,"Launch AMSL: " + LAUNCH_AMSL + "m").
   logMessage(LOGADVISORY,"Launch AGL: " + LAUNCH_AGL + "m").
@@ -330,7 +455,7 @@ function doMain {
   until not AUTOPILOT {
     doAscentGuidance().
     doTelemetry().
-    if (LOGGING_ENABLED) {
+    if (LOGGING_ENABLED and MYLOGFILE <> "") {
       if TIME:SECONDS >= NEXT_LOG_TIME {
         set NEXT_LOG_TIME to NEXT_LOG_TIME + 1.
         logTelemetry().
@@ -348,9 +473,9 @@ function doFinalise {
   logMessage(LOGMAJOR, "MISSION GOALS:").
   logMessage(LOGMAJOR, " - Min Apoapsis: " + MISSION_GOAL_MINAPO).
   logMessage(LOGMAJOR, " - Suborbital: " + MISSION_GOAL_SUBORBITAL).
-  logMessage(LOGMAJOR, " - Safe Landing: " + MISSION_GOAL_SAFELANDING).
   logMessage(LOGMAJOR, " - Min Avionics Time: " + MISSION_GOAL_AVIONICSTIME).
   logMessage(LOGMAJOR, " - Min Downrange: " + MISSION_GOAL_DOWNRANGE).
+  logMessage(LOGMAJOR, " - No RUD: " + MISSION_GOAL_NORUD).
   logMessage(LOGMAJOR,"PROGRAM COMPLETE").
   until false {
     wait 1.
@@ -358,6 +483,10 @@ function doFinalise {
 }
 
 function logTelemetry {
+  if (not LOGGING_ENABLED or MYLOGFILE = "") {
+    return.
+  }
+
   // log pitch above local horizon (90 = straight up, 0 = horizon)
   set LOGGED_PITCH to 90 - VANG(MY_VESSEL:FACING:FOREVECTOR, MY_VESSEL:UP:FOREVECTOR).
   log
