@@ -44,6 +44,9 @@ local TIGNITE is 5. // Ignition at Tminus (at Tmin throttle)
 local TTHROTTLE is 1. // Tminus for full throttle
 local TGANTRY is 0. // Gantry/clamp release at Tminus
 local Tmin is 0.32. // minimum throttle at ignition
+local ENGINE_START_SPOOL_TIME is 2.45. // seconds to wait after ignition command before checking expected thrust at Tmin
+local ENGINE_START_TMIN_EXPECTED_FRAC is 0.95. // required fraction of expected thrust at Tmin after spool
+local ENGINE_START_FULL_EXPECTED_FRAC is 0.90. // required fraction of max thrust at full-throttle check before gantry release
 local TELEMETRY_ENABLED is false. // log to console
 local LOGGING_ENABLED is false. // log to CSV (archive access required)
 local DEPLOY_ACCEL_SAFE is true. // deploy AG8 modules once atmo drag is no longer a factor
@@ -169,7 +172,9 @@ function doTowerPhase {
     log logpid() + ",,,," to MYLOGFILE.
     log "MET,ALT,PITCH,Q,APO,DOWNRANGE" to MYLOGFILE.
   }
-  doCountdownWithThrottle(TCOUNT, TIGNITE, Tmin, TGANTRY, TTHROTTLE).
+  if not doCountdownWithEngineStartScrub(TCOUNT, TIGNITE, Tmin, TGANTRY, TTHROTTLE) {
+    return.
+  }
   lock throttle to towerThrottle().
   logMessage(LOGADVISORY,"LIFTOFF").
   lock steering to up.
@@ -354,6 +359,85 @@ function doFinalise {
   until false {
     wait 1.
   }
+}
+
+function doCountdownWithEngineStartScrub {
+  parameter t, i, Tmin, gt, tf.
+  local throttlePrimed is false.
+  local ignitionCommanded is false.
+  local spoolChecked is false.
+  local ignitionStartTime is -1.
+  logMessage(LOGADVISORY,"T MINUS").
+  from {local c is t.} until c = -1 step {set c to c - 1.} do {
+    WAIT 1.
+    logMessage(LOGADVISORY," ... " + c).
+    if (i <> -1 and not throttlePrimed and c = (i + 1)) {
+      lock throttle to Tmin.
+      logMessage(LOGADVISORY,"THROTTLE PRIMED TO " + Tmin).
+      set throttlePrimed to true.
+    }
+    if (c = i) {
+      logMessage(LOGADVISORY,"IGNITION").
+      lock throttle to Tmin.
+      doSafeStage().
+      set ignitionCommanded to true.
+      set spoolChecked to false.
+      set ignitionStartTime to TIME:SECONDS.
+    }
+
+    if (ignitionCommanded and not spoolChecked and (TIME:SECONDS - ignitionStartTime) >= ENGINE_START_SPOOL_TIME) {
+      if not hasExpectedThrustAtThrottle(Tmin, ENGINE_START_TMIN_EXPECTED_FRAC) {
+        doLaunchAutoScrub("MAIN ENGINE FAILED TO REACH TMIN THRUST AFTER SPOOL").
+        return false.
+      }
+      set spoolChecked to true.
+    }
+
+    if (c = gt) {
+      if (tf = -1 or tf > gt) {
+        logMessage(LOGADVISORY,"FULL THROTTLE (PRE-GANTRY)").
+        lock throttle to 1.
+      }
+      if (i <> -1 and ignitionCommanded) {
+        if not spoolChecked {
+          doLaunchAutoScrub("ENGINE SPOOL CHECK NOT COMPLETE BEFORE GANTRY RELEASE").
+          return false.
+        }
+        if not hasExpectedThrustAtThrottle(1, ENGINE_START_FULL_EXPECTED_FRAC) {
+          doLaunchAutoScrub("MAIN ENGINE FAILED TO REACH FULL THRUST BEFORE GANTRY RELEASE").
+          return false.
+        }
+      }
+      logMessage(LOGADVISORY,"GANTRY").
+      doSafeStage().
+    }
+    if (c = tf and (i = -1 or c < i)) {
+      logMessage(LOGADVISORY,"FULL THROTTLE").
+      lock throttle to 1.
+    }
+  }
+  return true.
+}
+
+function hasExpectedThrustAtThrottle {
+  parameter throttleCmd, expectedFrac.
+  local vesselMaxRatedThrust is MY_VESSEL:MAXTHRUST.
+  if vesselMaxRatedThrust <= 0 {
+    return false.
+  }
+  return MY_VESSEL:AVAILABLETHRUST >= (vesselMaxRatedThrust * throttleCmd * expectedFrac).
+}
+
+function doLaunchAutoScrub {
+  parameter reason.
+  logMessage(LOGMAJOR,"AUTO SCRUB").
+  logMessage(LOGERROR,reason).
+  lock throttle to 0.
+  set ASCENT_GUIDANCE_ACTIVE to false.
+  set APO_HOLD_ACTIVE to false.
+  lock steering to up.
+  set MY_VESSEL:control:neutralize to true.
+  set AUTOPILOT to false.
 }
 
 function logTelemetry {

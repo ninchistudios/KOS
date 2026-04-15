@@ -11,27 +11,27 @@
 
 print " ".
 print "##########################################################".
-print "# MISSION: 2026EX006                                     #".
-print "# Contract: Downrange Milestone (3000km)                 #".
+print "# MISSION: 2026EX007                                     #".
+print "# Contract: Suborbital Research Advanced Biological      #".
 print "#                                                        #".
 print "# Mission Objective:                                     #".
 print "# - min 140km altitude                                   #".
 print "# - Suborbital trajectory                                #".
 print "# - min 50s Avionics Time                                #".
-print "# - 3,000 km downrange                                   #".
-print "# - don't RUD                                            #".
+print "# - min surface-relative speed 2200 m/s                  #".
+print "# - land safely                                          #".
 print "##########################################################".
 print " ".
 // CONFIGURE FLIGHT
 // Do not include mission specifics in comments, these will be reused and are self-evident
-local AGL_BARE is 32.0. // AGL of the bare vehicle at launch - adjust to match your rocket
-local CUT_APO is 999999999. // MECO if we exceed this apoapsis
+local AGL_BARE is 17.7. // AGL of the bare vehicle at launch - adjust to match your rocket
+local CUT_APO is 160000. // MECO if we exceed this apoapsis
 local TGT_HEADING is 270. // compass heading after launch
-local TGT_PITCH is 45. // pitch above horizon during ascent phase (90=vertical, lower=more downrange)
-local PITCH_START_ALT is 1000. // altitude at which to begin pitch program
-local PITCH_RATE_DPS is 1.3. // pitch rate for smooth transition from 90 to TGT_PITCH (degrees per second)
-local SPIN_STAB_RATE is 1.0. // raw roll command after pitch stabilises for spin mode (-1..1, clamped)
-local SPIN_STAB_START_ALT is 24000. // minimum altitude before enabling spin stabilisation after max-Q
+local TGT_PITCH is 5. // pitch above horizon during ascent phase (90=vertical, lower=more downrange)
+local PITCH_START_ALT is 6000. // altitude at which to begin pitch program
+local PITCH_RATE_DPS is 1.8. // pitch rate for smooth transition from 90 to TGT_PITCH (degrees per second)
+local SPIN_STAB_RATE is 0.0. // raw roll command after pitch stabilises for spin mode (-1..1, clamped)
+local SPIN_STAB_START_ALT is 9999999. // minimum altitude before enabling spin stabilisation after max-Q
 local SPIN_PITCH_TOL_DEG is 1.0. // allowed pitch error around TGT_PITCH before entering raw spin mode
 local SPIN_PITCH_STABLE_SEC is 0.5. // pitch must stay within tolerance for this long before raw spin starts
 local APO_HOLD_LOW_FRAC is 1.05. // lower bound of apo hold band as fraction of MISSION_MIN_APO
@@ -62,11 +62,19 @@ local STAGE1_FUEL_RESOURCE is "Ethanol90". // stage-1 propellant resource used f
 local STAGE1_HOTSTAGE_FUEL_REMAINING is 0.0. // hotstage when remaining STAGE1_FUEL_RESOURCE is at or below this amount
 local STAGE_ULLAGE_SETTLE_TIME is 0.0. // minimum delay between hotstage and subsequent separation staging
 local STAGE2_MECO_GRACE_TIME is 2.0. // seconds to wait after stage-2 separation before allowing MECO
+local MECO_REQUIRE_STAGE2_SEPARATION is false. // set true for strict multi-stage profiles, false for single-stage/simplified cutoff logic
+local SPEED_CUTOFF_MARGIN_FRAC is 1.05. // required speed multiple for cutoff safety margin (1.05 = 5% over mission target)
+local Q_LIMIT_KPA is 60.0. // throttle limiting target to keep dynamic pressure below this value
+local Q_THROTTLE_MIN is 0.25. // minimum throttle applied by the Q limiter
+local Q_THROTTLE_BAND_KPA is 15.0. // pressure band above limit where throttle ramps toward Q_THROTTLE_MIN
 // Mission parameters for success tracking
 local MISSION_MIN_APO is 140000. // apoapsis
+local MISSION_MIN_SPEED_SFC is 2200. // surface-relative speed in m/s
+local MISSION_CUT_SPEED_SFC is 2800. // max surface-relative speed in m/s if CUT_APO is also satisfied
 local MISSION_MIN_AVIONICSTIME is 50. // minimum avionics duration in seconds
-local MISSION_MIN_DOWNRANGE is 3000000. // minimum downrange distance in meters
+local MISSION_MIN_DOWNRANGE is -1. // minimum downrange distance in meters, -1 is disabled
 local MISSION_GOAL_MINAPO is false.
+local MISSION_GOAL_MINSPEED is false.
 local MISSION_GOAL_SUBORBITAL is true.
 local MISSION_GOAL_AVIONICSTIME is false.
 local MISSION_GOAL_DOWNRANGE is false.
@@ -107,7 +115,6 @@ local MAXQ_PASSED is false.
 local STAGE1_FUEL_START is -1.
 local SPIN_RAW_MODE_ACTIVE is false.
 local SPIN_STABLE_PITCH_SINCE is -1.
-local MISSION_RESULTS_REPORTED is false.
 local MYLOGFILE is "".
 
 // RUN
@@ -129,8 +136,8 @@ function doFlightTriggers {
       logMessage(LOGADVISORY,"TOWER CLEAR").
       doAscentPhase().
 
-      // burnout or risking unplanned orbit - cut engines
-      when (STAGE2_SEPARATION_DONE and (STAGE2_SEPARATION_TIME < 0 or TIME:SECONDS - STAGE2_SEPARATION_TIME > STAGE2_MECO_GRACE_TIME) and (stageNeeded(MY_VESSEL) or MY_VESSEL:periapsis > 0 or MY_VESSEL:APOAPSIS > CUT_APO)) then {
+      // cut engines only when both cutoff thresholds are exceeded simultaneously
+      when (((not MECO_REQUIRE_STAGE2_SEPARATION) or (STAGE2_SEPARATION_DONE and (STAGE2_SEPARATION_TIME < 0 or TIME:SECONDS - STAGE2_SEPARATION_TIME > STAGE2_MECO_GRACE_TIME))) and (MY_VESSEL:APOAPSIS > CUT_APO and surfaceRelativeSpeed() > MISSION_CUT_SPEED_SFC)) then {
         doMECO().
 
         // ballistic coast - wait for impact
@@ -154,12 +161,16 @@ function doMissionGoals {
   when (not MISSION_GOAL_DOWNRANGE and DOWNRANGE >= MISSION_MIN_DOWNRANGE) THEN {
     set MISSION_GOAL_DOWNRANGE to true.
     logMessage(LOGADVISORY,"Mission Goal Achieved: Min Downrange").
-    doMissionOutcomeReport().
   }
   // minimum apoapsis
   when MY_VESSEL:altitude >= MISSION_MIN_APO THEN {
     set MISSION_GOAL_MINAPO to true.
     logMessage(LOGADVISORY,"Mission Goal Achieved: Min Apoapsis").
+  }
+  // minimum surface-relative speed
+  when (not MISSION_GOAL_MINSPEED and surfaceRelativeSpeed() >= MISSION_MIN_SPEED_SFC) THEN {
+    set MISSION_GOAL_MINSPEED to true.
+    logMessage(LOGADVISORY,"Mission Goal Achieved: Min Surface Relative Speed").
   }
   // record highest altitude reached during the flight
   when MY_VESSEL:ALTITUDE > MAX_ALTITUDE THEN {
@@ -181,22 +192,13 @@ function doMissionGoals {
 
 }
 
-function doMissionOutcomeReport {
-  if MISSION_RESULTS_REPORTED {
-    return.
-  }
-  set MISSION_RESULTS_REPORTED to true.
-  logMessage(LOGMAJOR,"MISSION OUTCOME READY - FINALISING WITHOUT TOUCHDOWN").
-  set AUTOPILOT to false.
-}
-
 function doTowerPhase {
   logMessage(LOGMAJOR,"TOWER PHASE").
   logMessage(LOGADVISORY, "Target Heading: " + TGT_HEADING + " / Ascent Pitch: " + TGT_PITCH).
   logMessage(LOGADVISORY, "Pitch Program Alt: " + PITCH_START_ALT/1000 + "km").
   if (LOGGING_ENABLED and MYLOGFILE <> "") {
     log logpid() + ",,,," to MYLOGFILE.
-    log "MET,ALT,PITCH,Q,APO,DOWNRANGE" to MYLOGFILE.
+    log "MET,ALT,VSR,PITCH,Q,APO,DOWNRANGE" to MYLOGFILE.
   }
   if not doCountdownWithEngineStartScrub(TCOUNT, TIGNITE, Tmin, TGANTRY, TTHROTTLE) {
     return.
@@ -213,7 +215,7 @@ function doTowerPhase {
 function doAscentPhase {
   logMessage(LOGMAJOR,"ASCENT PHASE").
   if DO_WARP { set warp to WARP_SPEED. }
-  lock throttle to 1.
+  lock throttle to missionQThrottle().
   rcs off.
   // deploy fairings and similar AG8 payloads as soon as aero risk is effectively gone
   // can also stage the avionics away from the engines to reduce chute needs
@@ -424,9 +426,21 @@ function activateRawSpin {
   logMessage(LOGADVISORY,"RAW SPIN ACTIVE - ROLL " + clampUnit(SPIN_STAB_RATE)).
 }
 
+function missionQThrottle {
+  if MY_Q <= Q_LIMIT_KPA {
+    return 1.
+  }
+
+  local overLimit is MY_Q - Q_LIMIT_KPA.
+  local scale is MIN(1, overLimit / MAX(0.1, Q_THROTTLE_BAND_KPA)).
+  local limited is 1 - (scale * (1 - Q_THROTTLE_MIN)).
+  return MAX(Q_THROTTLE_MIN, limited).
+}
+
 function doTelemetry {
   if TELEMETRY_ENABLED {
     // logConsole parameters mType,msg,val,index
+    logConsole(LOGTELEMETRY,"Vsr",ROUND(surfaceRelativeSpeed(),1),7).
     logConsole(LOGTELEMETRY,"Q",ROUND(MY_Q,1),6).
     logConsole(LOGTELEMETRY,"Mass",ROUND(MY_VESSEL:mass,1),5).
     logConsole(LOGTELEMETRY,"Vv",ROUND(MY_VESSEL:verticalspeed,1),4).
@@ -480,6 +494,7 @@ function doFinalise {
   logMessage(LOGMAJOR, "FINAL MET: " + currentMETFormatDHMS()).
   logMessage(LOGMAJOR, "MISSION GOALS:").
   logMessage(LOGMAJOR, " - Min Apoapsis: " + MISSION_GOAL_MINAPO).
+  logMessage(LOGMAJOR, " - Min Surface Relative Speed: " + MISSION_GOAL_MINSPEED).
   logMessage(LOGMAJOR, " - Suborbital: " + MISSION_GOAL_SUBORBITAL).
   logMessage(LOGMAJOR, " - Min Avionics Time: " + MISSION_GOAL_AVIONICSTIME).
   logMessage(LOGMAJOR, " - Min Downrange: " + MISSION_GOAL_DOWNRANGE).
@@ -584,6 +599,8 @@ function logTelemetry {
     + ","
     + MY_VESSEL:ALTITUDE
     + ","
+    + ROUND(surfaceRelativeSpeed(),1)
+    + ","
     + LOGGED_PITCH
     + ","
     + MY_Q
@@ -592,4 +609,10 @@ function logTelemetry {
     + ","
     + DOWNRANGE
   to MYLOGFILE.
+}
+
+function surfaceRelativeSpeed {
+  local horizontal is MY_VESSEL:GROUNDSPEED.
+  local vertical is MY_VESSEL:verticalspeed.
+  return SQRT((horizontal * horizontal) + (vertical * vertical)).
 }
