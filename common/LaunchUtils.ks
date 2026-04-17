@@ -60,9 +60,11 @@ function ascentHeading {
 
 // ascent on a logarithmic path
 function ascentPitch {
-	parameter vess.
+	parameter vess, targetApo.
 	if vess:APOAPSIS <= 0 { return 89.9. }
-	local tp is min(89.9,-30 * ln(vess:APOAPSIS * 0.000005)).
+	local apoTarget is MAX(1, targetApo).
+	local c is 1 / apoTarget.
+	local tp is min(89.9,-30 * ln(vess:APOAPSIS * c)).
 	return max(0, tp).
 }
 

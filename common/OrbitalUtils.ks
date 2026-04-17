@@ -10,12 +10,12 @@ function initCircPID {
 
 // circularisation, adjusting pitch to keep APO at TGT_APO
 function circPitch {
-  parameter vessel,flip.
+  parameter myvessel,flip.
   if (flip) {
     // past APO, invert pitch
-    set CIRC_PITCH to max(CLAMP_NEG_PITCH,min(CLAMP_POS_PITCH,CIRC_PITCH - CPPID:UPDATE(TIME:seconds,vessel:APOAPSIS))).
+    set CIRC_PITCH to max(CLAMP_NEG_PITCH,min(CLAMP_POS_PITCH,CIRC_PITCH - CPPID:UPDATE(TIME:seconds,myvessel:APOAPSIS))).
   } else {
-      set CIRC_PITCH to max(CLAMP_NEG_PITCH,min(CLAMP_POS_PITCH,CIRC_PITCH + CPPID:UPDATE(TIME:seconds,vessel:APOAPSIS))).
+      set CIRC_PITCH to max(CLAMP_NEG_PITCH,min(CLAMP_POS_PITCH,CIRC_PITCH + CPPID:UPDATE(TIME:seconds,myvessel:APOAPSIS))).
   }
   print "CPTCH:" + ROUND(CIRC_PITCH,1) + "  " at (TERMINAL:WIDTH - 16,5).
   return CIRC_PITCH.
@@ -23,7 +23,7 @@ function circPitch {
 
 // thanks CheersKevin
 function doCircularization {
-  parameter vessel, est_dv.
+  parameter myvessel, est_dv.
   local circ is list(time:seconds + eta:APOAPSIS, 0, 0, est_dv).
   until false {
     local oldScore is score(circ).
@@ -32,7 +32,7 @@ function doCircularization {
       break.
     }
   }
-  executeManeuver(circ, vessel).
+  executeManeuver(circ, myvessel).
 }
 
 // thanks CheersKevin
@@ -75,20 +75,20 @@ function improve {
 
 // thanks CheersKevin
 function executeManeuver {
-  parameter mList, vessel.
+  parameter mList, myvessel.
   local mnv is node(mList[0], mList[1], mList[2], mList[3]).
   addManeuverToFlightPlan(mnv).
-  local startTime is calculateStartTime(mnv, vessel).
+  local startTime is calculateStartTime(mnv, myvessel).
   wait until time:seconds > startTime - 10.
   lockSteeringAtManeuverTarget(mnv).
   wait until time:seconds > startTime.
   // lock throttle to 1.
-  lock throttle to max(min(mnv:burnvector:mag / (ship:availablethrust / ship:mass),1),0.005).
+  lock throttle to max(min(mnv:burnvector:mag / (myvessel:availablethrust / myvessel:mass),1),0.005).
   // because this occurs in a preserved function, other preserved functions
   // (such as checking staging) seem to be suspended, so we need to specifically
   // check this one each tick
   // until isManeuverComplete(mnv) {
-    // if stageNeeded(SHIP) {
+    // if stageNeeded(myvessel) {
     //   doSafeStage().
   //   }
   // }
@@ -103,24 +103,24 @@ function addManeuverToFlightPlan {
 }
 
 function calculateStartTime {
-  parameter mnv, vessel.
-  return time:seconds + mnv:eta - maneuverBurnTime(mnv, vessel) / 2.
+  parameter mnv, myvessel.
+  return time:seconds + mnv:eta - maneuverBurnTime(mnv, myvessel) / 2.
 }
 
 function maneuverBurnTime {
-  parameter mnv, vessel.
+  parameter mnv, myvessel.
   local dV is mnv:deltaV:mag.
   local isp is 0.
   local myEngines is 0.
   list engines in myEngines.
   for en in myEngines {
     if en:ignition and not en:flameout {
-      set isp to isp + (en:isp * (en:maxThrust / vessel:maxThrust)).
+      set isp to isp + (en:isp * (en:maxThrust / myvessel:maxThrust)).
     }
   }
-  local mf is vessel:mass / constant:e^(dV / (isp * constant:g0)).
-  local fuelFlow is vessel:maxThrust / (isp * constant:g0).
-  local t is (vessel:mass - mf) / fuelFlow.
+  local mf is myvessel:mass / constant:e^(dV / (isp * constant:g0)).
+  local fuelFlow is myvessel:maxThrust / (isp * constant:g0).
+  local t is (myvessel:mass - mf) / fuelFlow.
 
   return t.
 }

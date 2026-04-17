@@ -19,6 +19,13 @@ print "# - demonstrate smooth ascent to accurate apogee         #".
 print "##########################################################".
 print " ".
 
+// Staging Configuration:
+// Stage 0: upper stack engine fairing, upper stack separator, upper stack engine (non-throttleable, gimbaled, vacuum optimised)
+// Stage 1: booster separators at booster burnout
+// Stage 2: gantry and solid boosters
+// Stage 3: main engine (non-throttleable, gimbaled, surface optimised)
+
+
 // CONFIGURE FLIGHT
 // ------------------------------------------------------------
 // VEHICLE AND PAD GEOMETRY
@@ -37,18 +44,22 @@ local CFG_DESCENT_PITCH is 90.
 // COUNTDOWN AND ENGINE START SAFETY
 local CFG_TCOUNT is 7.
 local CFG_TIGNITE is 5.
-local CFG_TTHROTTLE is 1.
+local CFG_TTHROTTLE_MIN is 0.32.
+local CFG_TTHROTTLE_GO is 1.
 local CFG_TGANTRY is 0.
-local CFG_TMIN is 0.32.
 local CFG_ENGINE_START_SPOOL_TIME is 2.45.
 local CFG_ENGINE_START_TMIN_EXPECTED_FRAC is 0.95.
 local CFG_ENGINE_START_FULL_EXPECTED_FRAC is 0.90.
+
+// BOOSTER STAGING
+local CFG_HAS_LAUNCH_BOOSTERS is true.
+local CFG_BOOSTER_STAGE_DELAY is 0.5.
 
 // WARP, TELEMETRY, LOGGING
 local CFG_DO_WARP is false.
 local CFG_WARP_SPEED is 3.
 local CFG_TELEMETRY_ENABLED is true.
-local CFG_LOGGING_ENABLED is true.
+local CFG_LOGGING_ENABLED is false.
 
 // PAYLOAD DEPLOYMENT SAFETY
 local CFG_DEPLOY_ACCEL_SAFE is true.
@@ -56,10 +67,11 @@ local CFG_DEPLOY_ACCEL_SAFE_ALT is 100000.
 local CFG_DEPLOY_ACCEL_SAFE_Q is 0.
 
 // MISSION SUCCESS CRITERIA
-local CFG_ENGINE_NOMINAL_BURN is 83.0.
+local CFG_ENGINE_FUEL_RESOURCE is "Ethanol90".
+local CFG_ENGINE_BURNOUT_REMAINING_FRAC is 0.005.
 local CFG_MISSION_MIN_APO is 200000.
 local CFG_MISSION_MIN_AVIONICS_TIME is 50.
-local CFG_MISSION_MAX_APO_ERROR is 15000.
+local CFG_MISSION_MAX_APO_ERROR is 10000.
 // END CONFIGURE FLIGHT
 
 // CONSTANTS AND GLOBALS
@@ -85,6 +97,8 @@ local GOAL_MIN_APO is false.
 local GOAL_TARGET_APO is false.
 local GOAL_SUBORBITAL is true.
 local GOAL_AVIONICS_TIME is false.
+local ENGINE_FUEL_AT_LAUNCH is 0.
+local BOOSTERS_SEPARATED is not CFG_HAS_LAUNCH_BOOSTERS.
 
 local MYLOGFILE is "".
 
@@ -107,8 +121,13 @@ function doFlightTriggers {
 			logMessage(LOGADVISORY,"TOWER CLEAR").
 			doAscentPhase().
 
+			// first thrust-drop with boosters attached is treated as booster burnout/separation.
+			when (CFG_HAS_LAUNCH_BOOSTERS and not BOOSTERS_SEPARATED and stageNeeded(MY_VESSEL)) then {
+				doBoosterSeparation().
+			}
+
 			// burnout or risking unplanned orbit - cut engines
-			when (stageNeeded(MY_VESSEL) or MY_VESSEL:PERIAPSIS > 0 or MY_VESSEL:APOAPSIS > CFG_CUT_APO) then {
+			when ((BOOSTERS_SEPARATED and stageNeeded(MY_VESSEL)) or MY_VESSEL:PERIAPSIS > 0 or (CFG_CUT_APO <> -1 and MY_VESSEL:APOAPSIS > CFG_CUT_APO)) then {
 				doMECO().
 
 				// ballistic coast - wait for impact
@@ -118,6 +137,16 @@ function doFlightTriggers {
 			}
 		}
 	}
+}
+
+function doBoosterSeparation {
+	if BOOSTERS_SEPARATED {
+		return.
+	}
+	logMessage(LOGMAJOR,"BOOSTER BURNOUT - STAGE 1 SEP").
+	doSafeStage().
+	set BOOSTERS_SEPARATED to true.
+	doStageDelay(CFG_BOOSTER_STAGE_DELAY).
 }
 
 function doMissionGoals {
@@ -156,9 +185,9 @@ function doTowerPhase {
 	if not doCountdownWithEngineStartScrub(
 		CFG_TCOUNT,
 		CFG_TIGNITE,
-		CFG_TMIN,
+		CFG_TTHROTTLE_MIN,
 		CFG_TGANTRY,
-		CFG_TTHROTTLE,
+		CFG_TTHROTTLE_GO,
 		MY_VESSEL,
 		CFG_ENGINE_START_SPOOL_TIME,
 		CFG_ENGINE_START_TMIN_EXPECTED_FRAC,
@@ -192,8 +221,8 @@ function doAscentPhase {
 	}
 
 	when MY_VESSEL:ALTITUDE >= CFG_PITCH_START_ALT THEN {
-		logMessage(LOGADVISORY,"Pitch Program - HDG " + CFG_TARGET_HEADING + " Pitch " + CFG_TARGET_PITCH).
-		lock STEERING to heading(CFG_TARGET_HEADING, CFG_TARGET_PITCH).
+		logMessage(LOGADVISORY,"Pitch Program - HDG " + CFG_TARGET_HEADING + " / Apo Target " + ROUND(CFG_MISSION_MIN_APO/1000,0) + "km").
+		lock STEERING to heading(CFG_TARGET_HEADING, ascentPitch(MY_VESSEL, CFG_MISSION_MIN_APO)).
 	}
 
 	when getResourceAmount("ELECTRICCHARGE") < 0.1 THEN {
@@ -207,16 +236,31 @@ function doMECO {
 
 	lock THROTTLE to 0.
 	local met is ROUND(TIME:SECONDS - START_TIME, 1).
+	local fuelNow is getResourceAmount(CFG_ENGINE_FUEL_RESOURCE).
+	local fuelLimit is ENGINE_FUEL_AT_LAUNCH * CFG_ENGINE_BURNOUT_REMAINING_FRAC.
 	logMessage(LOGADVISORY,"BURNOUT MET+" + met + "s / DOWNRANGE " + ROUND(DOWNRANGE/1000,1) + "km").
+	logMessage(LOGADVISORY,"ENGINE FUEL " + CFG_ENGINE_FUEL_RESOURCE + " NOW " + ROUND(fuelNow,4) + " / LIMIT " + ROUND(fuelLimit,4)).
 
-	if (met < CFG_ENGINE_NOMINAL_BURN or MY_VESSEL:APOAPSIS < CFG_MISSION_MIN_APO) {
+	if (ENGINE_FUEL_AT_LAUNCH <= 0 or fuelNow > fuelLimit or MY_VESSEL:APOAPSIS < CFG_MISSION_MIN_APO) {
 		logMessage(LOGERROR,"ENGINE OUT OF NOMINAL").
 	} else {
 		logMessage(LOGADVISORY,"ENGINE BURN NOMINAL").
 	}
 
-	lock STEERING to up.
-	logMessage(LOGADVISORY,"BALLISTIC").
+	lock STEERING to heading(CFG_TARGET_HEADING, ascentPitch(MY_VESSEL, CFG_MISSION_MIN_APO)).
+	logMessage(LOGADVISORY,"UPPER STAGE GUIDANCE ACTIVE").
+
+	// Vehicle config: Stage 0 is upper stack separation/engine; execute immediately at MECO.
+	lock THROTTLE to CFG_TTHROTTLE_GO.
+	logMessage(LOGADVISORY,"THROTTLE GO FOR STAGE 0 IGNITION").
+	logMessage(LOGADVISORY,"STAGE 0 HANDOFF").
+	doSafeStage().
+	if MY_VESSEL:AVAILABLETHRUST <= 0 {
+		logMessage(LOGERROR,"STAGE 0 ENGINE NO THRUST AFTER HANDOFF").
+	} else {
+		logMessage(LOGADVISORY,"STAGE 0 ENGINE LIT").
+	}
+	set ACCEL_SAFE_DEPLOYED to true.
 
 	when (MY_VESSEL:ALTITUDE >= CFG_DEPLOY_ACCEL_SAFE_ALT and MY_Q <= CFG_DEPLOY_ACCEL_SAFE_Q and not ACCEL_SAFE_DEPLOYED) then {
 		logMessage(LOGADVISORY,"STAGING AVIONICS AND PAYLOAD").
@@ -270,6 +314,8 @@ function doSetup {
 	logMessage(LOGADVISORY,"Hardware AGL: " + CFG_AGL_BARE + "m").
 	logMessage(LOGADVISORY,"Wet Mass: " + ROUND(MY_VESSEL:WETMASS,1) + "T").
 	logMessage(LOGADVISORY,"Dry Mass: " + ROUND(MY_VESSEL:DRYMASS,1) + "T").
+	set ENGINE_FUEL_AT_LAUNCH to getResourceAmount(CFG_ENGINE_FUEL_RESOURCE).
+	logMessage(LOGADVISORY,"Engine Fuel @ Launch (" + CFG_ENGINE_FUEL_RESOURCE + "): " + ROUND(ENGINE_FUEL_AT_LAUNCH,4)).
 }
 
 function doMain {

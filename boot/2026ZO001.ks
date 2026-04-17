@@ -38,7 +38,7 @@ if ch = "F" { // GO FLIGHT
   // Run directly from archive - avoids local volume memory limits
   runoncepath("0:/common/Utils"). // utils are always available
   runoncepath("0:/common/LaunchUtils").
-  // runoncepath("0:/common/OrbitalUtils").
+  runoncepath("0:/common/OrbitalUtils").
   // runoncepath("0:/common/LandingUtils").
   runoncepath("0:/missions/" + MISSION_ID). // run the mission
   print "GO FLIGHT".
