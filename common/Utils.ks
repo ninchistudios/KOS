@@ -234,10 +234,10 @@ function doCountdownWithThrottle {
 function doGridfins {
   parameter turnOn.
   if (turnOn) {
-    AG7 on.
+    AG3 on.
     logMessage(LOGADVISORY,"GRIDFINS OUT").
   } else {
-    AG7 off.
+    AG3 off.
     logMessage(LOGADVISORY,"GRIDFINS IN").
   }
 }
