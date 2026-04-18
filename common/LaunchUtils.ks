@@ -12,8 +12,8 @@ local NO_STAGE_BEFORE is 0.
 local CPp is 0.04.
 local CPi is 0.01.
 local CPd is 0.15.
-local CLAMP_POS_PITCH is 15.
-local CLAMP_NEG_PITCH is -89.
+global CLAMP_POS_PITCH is 15.
+global CLAMP_NEG_PITCH is -89.
 
 function neutraliseRoll {
 	SET STEERINGMANAGER:ROLLPID:KP TO 0.
@@ -60,11 +60,11 @@ function ascentHeading {
 
 // ascent on a logarithmic path
 function ascentPitch {
-	parameter vess, targetApo.
-	if vess:APOAPSIS <= 0 { return 89.9. }
+	parameter vess, targetApo, initialPitch.
+	if vess:APOAPSIS <= 0 { return initialPitch. }
 	local apoTarget is MAX(1, targetApo).
 	local c is 1 / apoTarget.
-	local tp is min(89.9,-30 * ln(vess:APOAPSIS * c)).
+	local tp is min(initialPitch,-40 * ln(vess:APOAPSIS * c)).
 	return max(0, tp).
 }
 

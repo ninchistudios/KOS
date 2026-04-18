@@ -33,8 +33,10 @@ local CFG_AGL_BARE is 17.7.
 
 // ASCENT TARGETS
 local CFG_CUT_APO is 215000.
+local CFG_CIRC_ALT is 180000.
+local CFG_CIRC_MIN_PERI is 160000.
 local CFG_TARGET_HEADING is 90.
-local CFG_TARGET_PITCH is 89.9.
+local CFG_INITIAL_PITCH is 89.0.
 local CFG_PITCH_START_ALT is 1000.
 
 // DESCENT PROFILE
@@ -43,7 +45,7 @@ local CFG_DESCENT_PITCH is 90.
 
 // COUNTDOWN AND ENGINE START SAFETY
 local CFG_TCOUNT is 7.
-local CFG_TIGNITE is 5.
+local CFG_TIGNITE is 4.
 local CFG_TTHROTTLE_MIN is 0.32.
 local CFG_TTHROTTLE_GO is 1.
 local CFG_TGANTRY is 0.
@@ -69,9 +71,14 @@ local CFG_DEPLOY_ACCEL_SAFE_Q is 0.
 // MISSION SUCCESS CRITERIA
 local CFG_ENGINE_FUEL_RESOURCE is "Ethanol90".
 local CFG_ENGINE_BURNOUT_REMAINING_FRAC is 0.005.
-local CFG_MISSION_MIN_APO is 200000.
+local CFG_MISSION_MIN_APO is 150000.
 local CFG_MISSION_MIN_AVIONICS_TIME is 50.
 local CFG_MISSION_MAX_APO_ERROR is 10000.
+local CFG_CIRC_PID_P is 0.004.
+local CFG_CIRC_PID_I is 0.0003.
+local CFG_CIRC_PID_D is 0.025.
+local CFG_CIRC_PID_OUT_MIN is -0.08.
+local CFG_CIRC_PID_OUT_MAX is 0.08.
 // END CONFIGURE FLIGHT
 
 // CONSTANTS AND GLOBALS
@@ -92,6 +99,11 @@ local ACCEL_SAFE_DEPLOYED is false.
 local AGL is 0.
 local MAX_PERIAPSIS is 0.
 local TARGET_APO_REACHED is false.
+local CIRC_GUIDANCE_ACTIVE is false.
+local CIRC_GUIDANCE_FLIP is false.
+local CIRC_ENGINE_CUTOFF_DONE is false.
+global CPPID is PIDLOOP(CFG_CIRC_PID_P, CFG_CIRC_PID_I, CFG_CIRC_PID_D, CFG_CIRC_PID_OUT_MIN, CFG_CIRC_PID_OUT_MAX).
+global CIRC_PITCH is 0.
 
 local GOAL_MIN_APO is false.
 local GOAL_TARGET_APO is false.
@@ -174,7 +186,7 @@ function doMissionGoals {
 
 function doTowerPhase {
 	logMessage(LOGMAJOR,"TOWER PHASE").
-	logMessage(LOGADVISORY, "Target Heading: " + CFG_TARGET_HEADING + " / Ascent Pitch: " + CFG_TARGET_PITCH).
+	logMessage(LOGADVISORY, "Target Heading: " + CFG_TARGET_HEADING + " / Initial Pitch: " + CFG_INITIAL_PITCH).
 	logMessage(LOGADVISORY, "Pitch Program Alt: " + CFG_PITCH_START_ALT/1000 + "km").
 
 	if (CFG_LOGGING_ENABLED and MYLOGFILE <> "") {
@@ -221,8 +233,8 @@ function doAscentPhase {
 	}
 
 	when MY_VESSEL:ALTITUDE >= CFG_PITCH_START_ALT THEN {
-		logMessage(LOGADVISORY,"Pitch Program - HDG " + CFG_TARGET_HEADING + " / Apo Target " + ROUND(CFG_MISSION_MIN_APO/1000,0) + "km").
-		lock STEERING to heading(CFG_TARGET_HEADING, ascentPitch(MY_VESSEL, CFG_MISSION_MIN_APO)).
+		logMessage(LOGADVISORY,"Pitch Program - HDG " + CFG_TARGET_HEADING + " / CIRC HOLD " + ROUND(CFG_CIRC_ALT/1000,0) + "km").
+		lock STEERING to heading(CFG_TARGET_HEADING, missionGuidancePitch(MY_VESSEL)).
 	}
 
 	when getResourceAmount("ELECTRICCHARGE") < 0.1 THEN {
@@ -247,7 +259,7 @@ function doMECO {
 		logMessage(LOGADVISORY,"ENGINE BURN NOMINAL").
 	}
 
-	lock STEERING to heading(CFG_TARGET_HEADING, ascentPitch(MY_VESSEL, CFG_MISSION_MIN_APO)).
+	lock STEERING to heading(CFG_TARGET_HEADING, missionGuidancePitch(MY_VESSEL)).
 	logMessage(LOGADVISORY,"UPPER STAGE GUIDANCE ACTIVE").
 
 	// Vehicle config: Stage 0 is upper stack separation/engine; execute immediately at MECO.
@@ -261,6 +273,14 @@ function doMECO {
 		logMessage(LOGADVISORY,"STAGE 0 ENGINE LIT").
 	}
 	set ACCEL_SAFE_DEPLOYED to true.
+
+	when (not CIRC_ENGINE_CUTOFF_DONE and CIRC_GUIDANCE_ACTIVE and MY_VESSEL:PERIAPSIS >= CFG_CIRC_MIN_PERI and ETA:APOAPSIS > ETA:PERIAPSIS) then {
+		set CIRC_ENGINE_CUTOFF_DONE to true.
+		lock THROTTLE to 0.
+		set CIRC_GUIDANCE_ACTIVE to false.
+		logMessage(LOGMAJOR,"CIRC COMPLETE - ENGINE CUTOFF").
+		logMessage(LOGADVISORY,"CUTOFF APO " + ROUND(MY_VESSEL:APOAPSIS/1000,1) + "km / PERI " + ROUND(MY_VESSEL:PERIAPSIS/1000,1) + "km").
+	}
 
 	when (MY_VESSEL:ALTITUDE >= CFG_DEPLOY_ACCEL_SAFE_ALT and MY_Q <= CFG_DEPLOY_ACCEL_SAFE_Q and not ACCEL_SAFE_DEPLOYED) then {
 		logMessage(LOGADVISORY,"STAGING AVIONICS AND PAYLOAD").
@@ -346,6 +366,29 @@ function doFinalise {
 	until false {
 		WAIT 1.
 	}
+}
+
+function missionGuidancePitch {
+	parameter vess.
+
+	if (not CIRC_GUIDANCE_ACTIVE and vess:APOAPSIS >= CFG_CIRC_ALT) {
+		set CIRC_GUIDANCE_ACTIVE to true.
+		set CIRC_GUIDANCE_FLIP to false.
+		set CIRC_PITCH to currentPitchDeg(vess).
+		initCircPID(CFG_CIRC_ALT).
+		logMessage(LOGMAJOR,"CIRC GUIDANCE HOLD " + ROUND(CFG_CIRC_ALT/1000,0) + "KM APO").
+	}
+
+	if (CIRC_GUIDANCE_ACTIVE and not CIRC_GUIDANCE_FLIP and ETA:APOAPSIS > ETA:PERIAPSIS) {
+		set CIRC_GUIDANCE_FLIP to true.
+		logMessage(LOGADVISORY,"PAST APOAPSIS - INVERTING CIRC GUIDANCE").
+	}
+
+	if CIRC_GUIDANCE_ACTIVE {
+		return circPitch(vess, CIRC_GUIDANCE_FLIP).
+	}
+
+	return ascentPitch(vess, CFG_MISSION_MIN_APO, CFG_INITIAL_PITCH).
 }
 
 function logTelemetry {
