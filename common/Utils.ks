@@ -79,3 +79,67 @@ function getResourceAmount {
   }
   return 0.
 }
+
+function isSrbEngine {
+  parameter engine, srbNames.
+  local engineName is engine:NAME.
+  for token in srbNames {
+    if engineName:contains(token) {
+      return true.
+    }
+  }
+  return false.
+}
+
+function logTelemetryBasic {
+  parameter outFile, startTime, vess, pitchDeg, qKpa, downrangeMeters.
+  log
+    (TIME:SECONDS - startTime)
+    + ","
+    + vess:ALTITUDE
+    + ","
+    + pitchDeg
+    + ","
+    + qKpa
+    + ","
+    + vess:APOAPSIS
+    + ","
+    + downrangeMeters
+  to outFile.
+}
+
+function logFlightTelemetryBasic {
+  parameter telemetryEnabled, vess, qKpa, downrangeMeters, srbNames.
+  if not telemetryEnabled {
+    return.
+  }
+
+  logConsole(LOGTELEMETRY,"Q",ROUND(qKpa,1),6).
+  logConsole(LOGTELEMETRY,"Mass",ROUND(vess:MASS,1),5).
+  logConsole(LOGTELEMETRY,"Vv",ROUND(vess:VERTICALSPEED,1),4).
+  logConsole(LOGTELEMETRY,"APO",ROUND(vess:APOAPSIS/1000,1),3).
+  logConsole(LOGTELEMETRY,"ALT",ROUND(vess:ALTITUDE/1000,1),2).
+  logConsole(LOGTELEMETRY,"DWNRNG",ROUND(downrangeMeters/1000,1),1).
+
+  local engines is list().
+  local engineRow is 15.
+  local engineCount is 0.
+  local totalThrustKn is 0.
+
+  list engines in engines.
+  for en in engines {
+    if not isSrbEngine(en, srbNames) {
+      set engineCount to engineCount + 1.
+      set totalThrustKn to totalThrustKn + en:THRUST.
+      if engineRow > 8 {
+        logConsole(LOGTELEMETRY,"E" + engineCount,ROUND(en:THRUST,1),engineRow).
+        set engineRow to engineRow - 1.
+      }
+    }
+  }
+
+  logConsole(LOGTELEMETRY,"THRST",ROUND(totalThrustKn,1),7).
+  if engineCount > 7 {
+    logConsole(LOGTELEMETRY,"ENG HIDE",engineCount - 7,8).
+  }
+}

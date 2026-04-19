@@ -5,17 +5,17 @@
 // AG7: PV Panels (atmo/accel unsafe)
 // AG8: Vacuum Accel-safe Modules (e.g. fairings) - safe to do a burn after deployed
 // AG9: Vacuum Accel-risk Modules (e.g. big antennas) - only deployed when there are no more burns
-// AG10: KAL9000 power toggle
+// AG0: KAL9000 power toggle
 
 @LAZYGLOBAL OFF.
 
 print " ".
 print "##########################################################".
-print "# MISSION: 2026ZO001                                     #".
-print "# Contract: Zoe-class Orbital Development                #".
+print "# MISSION: 2026EX008                                     #".
+print "# Contract: Suborbital Recovered Science                 #".
 print "#                                                        #".
 print "# Mission Objective:                                     #".
-print "# - demonstrate smooth ascent to accurate apogee         #".
+print "# - launch to suborbital altitude and recover science    #".
 print "##########################################################".
 print " ".
 
@@ -31,28 +31,19 @@ print " ".
 // VEHICLE AND PAD GEOMETRY
 local CFG_AGL_BARE is 17.7.
 
-// ASCENT config
-local CFG_TARGET_HEADING is 90. // basic ascent heading target, -1 to use CFG_TARGET_INCL instead
-// local CFG_TARGET_INCL is -12. // if CFG_TARGET_HEADING is -1, target this inclination instead
+// ASCENT TARGETS
+local CFG_CUT_APO is 215000.
+local CFG_CIRC_ALT is 180000.
+local CFG_CIRC_MIN_PERI is 160000.
+local CFG_TARGET_HEADING is 90.
 local CFG_INITIAL_PITCH is 89.0.
 local CFG_PITCH_START_ALT is 1000.
-local CFG_ASCENT_SHAPE_FACTOR is 0.36. // baseline 0.4. Lower = more aggressive turn
-// local CFG_ASCENT_MAX_AOA is 5.
-
-// Circularisation config
-local CFG_CIRC_MIN_PERI is 160000. // terminate circularisation if periapsis goes below
-local CFG_CIRC_ALT is 180000. // target periapsis for circularisation
-local CFG_CUT_APO is 215000. // terminate circularisation if apoapsis goes above - set to -1 to disable
-local CFG_CIRC_PID_P is 0.005.
-local CFG_CIRC_PID_I is 0.0003.
-local CFG_CIRC_PID_D is 0.025.
-local CFG_CIRC_PID_OUT_MIN is -0.08.
-local CFG_CIRC_PID_OUT_MAX is 0.08.
 
 // DESCENT PROFILE
-local CFG_CHUTE_STAGE_ALT is -1.
+local CFG_CHUTE_STAGE_ALT is 14000.
+local CFG_DESCENT_PITCH is 90.
 
-// COUNTDOWN AND ENGINE SAFETY
+// COUNTDOWN AND ENGINE START SAFETY
 local CFG_TCOUNT is 7.
 local CFG_TIGNITE is 4.
 local CFG_TTHROTTLE_MIN is 0.32.
@@ -61,35 +52,35 @@ local CFG_TGANTRY is 0.
 local CFG_ENGINE_START_SPOOL_TIME is 2.45.
 local CFG_ENGINE_START_TMIN_EXPECTED_FRAC is 0.95.
 local CFG_ENGINE_START_FULL_EXPECTED_FRAC is 0.90.
-local CFG_ENGINE_FUEL_RESOURCE is "RP-1".
-local CFG_ENGINE_BURNOUT_REMAINING_FRAC is 0.005.
 
 // BOOSTER STAGING
 local CFG_HAS_LAUNCH_BOOSTERS is true.
 local CFG_BOOSTER_STAGE_DELAY is 0.5.
-local CFG_SRB_NAMES is list("Nike").
 
 // WARP, TELEMETRY, LOGGING
 local CFG_DO_WARP is false.
 local CFG_WARP_SPEED is 3.
 local CFG_TELEMETRY_ENABLED is true.
 local CFG_LOGGING_ENABLED is false.
+local CFG_SRB_NAMES is list("Nike").
 
 // PAYLOAD DEPLOYMENT SAFETY
 local CFG_DEPLOY_ACCEL_SAFE is true.
-local CFG_DEPLOY_ACCEL_SAFE_ALT is 140000.
+local CFG_DEPLOY_ACCEL_SAFE_ALT is 100000.
 local CFG_DEPLOY_ACCEL_SAFE_Q is 0.
 
-// MISSION SUCCESS CRITERIA - not used for flight, only for mission success logging
-local CFG_MISSION_MIN_AVIONICS_TIME is 50.
+// MISSION SUCCESS CRITERIA
+local CFG_ENGINE_FUEL_RESOURCE is "Ethanol90".
+local CFG_ENGINE_BURNOUT_REMAINING_FRAC is 0.005.
 local CFG_MISSION_MIN_APO is 150000.
-local CFG_MISSION_MIN_PERI is 150000.
+local CFG_MISSION_MIN_AVIONICS_TIME is 50.
+local CFG_MISSION_MAX_APO_ERROR is 10000.
+local CFG_CIRC_PID_P is 0.004.
+local CFG_CIRC_PID_I is 0.0003.
+local CFG_CIRC_PID_D is 0.025.
+local CFG_CIRC_PID_OUT_MIN is -0.08.
+local CFG_CIRC_PID_OUT_MAX is 0.08.
 // END CONFIGURE FLIGHT
-
-// Mission goals per success criteria above
-local GOAL_MIN_APO is false.
-local GOAL_MIN_PERI is false.
-local GOAL_AVIONICS_TIME is false.
 
 // CONSTANTS AND GLOBALS
 local LAUNCH_AMSL is ROUND(SHIP:ALTITUDE,3).
@@ -112,14 +103,15 @@ local TARGET_APO_REACHED is false.
 local CIRC_GUIDANCE_ACTIVE is false.
 local CIRC_GUIDANCE_FLIP is false.
 local CIRC_ENGINE_CUTOFF_DONE is false.
-// global ASPID is PIDLOOP(CFG_ASC_PID_P, CFG_ASC_PID_I, CFG_ASC_PID_D, CFG_ASC_PID_OUT_MIN, CFG_ASC_PID_OUT_MAX).
-// global ASC_PITCH is 0.
 global CPPID is PIDLOOP(CFG_CIRC_PID_P, CFG_CIRC_PID_I, CFG_CIRC_PID_D, CFG_CIRC_PID_OUT_MIN, CFG_CIRC_PID_OUT_MAX).
 global CIRC_PITCH is 0.
 
+local GOAL_MIN_APO is false.
+local GOAL_TARGET_APO is false.
+local GOAL_SUBORBITAL is true.
+local GOAL_AVIONICS_TIME is false.
 local ENGINE_FUEL_AT_LAUNCH is 0.
 local BOOSTERS_SEPARATED is not CFG_HAS_LAUNCH_BOOSTERS.
-local BALLISTIC_ORBIT is false.
 
 local MYLOGFILE is "".
 
@@ -171,12 +163,21 @@ function doBoosterSeparation {
 }
 
 function doMissionGoals {
-	when BALLISTIC_ORBIT and MY_VESSEL:apoapsis >= CFG_MISSION_MIN_APO THEN {
+	when MY_VESSEL:ALTITUDE >= CFG_MISSION_MIN_APO THEN {
 		set GOAL_MIN_APO to true.
 	}
 
-	when BALLISTIC_ORBIT and MY_VESSEL:periapsis >= CFG_MISSION_MIN_PERI THEN {
-		set GOAL_MIN_PERI to true.
+	when MY_VESSEL:APOAPSIS >= (CFG_MISSION_MIN_APO - CFG_MISSION_MAX_APO_ERROR) and MY_VESSEL:APOAPSIS <= (CFG_MISSION_MIN_APO + CFG_MISSION_MAX_APO_ERROR) THEN {
+		set GOAL_TARGET_APO to true.
+		set TARGET_APO_REACHED to true.
+	}
+
+	when MY_VESSEL:PERIAPSIS > MAX_PERIAPSIS THEN {
+		set MAX_PERIAPSIS to MY_VESSEL:PERIAPSIS.
+	}
+
+	when MAX_PERIAPSIS > 140000 THEN {
+		set GOAL_SUBORBITAL to false.
 	}
 
 	when currentMETseconds() > CFG_MISSION_MIN_AVIONICS_TIME THEN {
@@ -233,7 +234,7 @@ function doAscentPhase {
 	}
 
 	when MY_VESSEL:ALTITUDE >= CFG_PITCH_START_ALT THEN {
-		logMessage(LOGADVISORY,"Pitch Program - HDG " + CFG_TARGET_HEADING + " / CIRC " + ROUND(CFG_CIRC_ALT/1000,0) + "km").
+		logMessage(LOGADVISORY,"Pitch Program - HDG " + CFG_TARGET_HEADING + " / CIRC HOLD " + ROUND(CFG_CIRC_ALT/1000,0) + "km").
 		lock STEERING to heading(CFG_TARGET_HEADING, missionGuidancePitch(MY_VESSEL)).
 	}
 
@@ -251,7 +252,7 @@ function doMECO {
 	local fuelNow is getResourceAmount(CFG_ENGINE_FUEL_RESOURCE).
 	local fuelLimit is ENGINE_FUEL_AT_LAUNCH * CFG_ENGINE_BURNOUT_REMAINING_FRAC.
 	logMessage(LOGADVISORY,"BURNOUT MET+" + met + "s / DOWNRANGE " + ROUND(DOWNRANGE/1000,1) + "km").
-	logMessage(LOGADVISORY,"FUEL " + CFG_ENGINE_FUEL_RESOURCE + " " + ROUND(fuelNow,1) + " / " + ROUND(fuelLimit,1)).
+	logMessage(LOGADVISORY,"FUEL " + CFG_ENGINE_FUEL_RESOURCE + ROUND(fuelNow,4) + " / " + ROUND(fuelLimit,4)).
 
 	if (ENGINE_FUEL_AT_LAUNCH <= 0 or fuelNow > fuelLimit or MY_VESSEL:APOAPSIS < CFG_MISSION_MIN_APO) {
 		logMessage(LOGERROR,"ENGINE OUT OF NOMINAL").
@@ -264,6 +265,7 @@ function doMECO {
 
 	// Vehicle config: Stage 0 is upper stack separation/engine; execute immediately at MECO.
 	lock THROTTLE to CFG_TTHROTTLE_GO.
+	logMessage(LOGADVISORY,"THROTTLE GO FOR STAGE 0 IGNITION").
 	logMessage(LOGADVISORY,"STAGE 0 HANDOFF").
 	doSafeStage().
 	if MY_VESSEL:AVAILABLETHRUST <= 0 {
@@ -275,12 +277,10 @@ function doMECO {
 
 	when (not CIRC_ENGINE_CUTOFF_DONE and CIRC_GUIDANCE_ACTIVE and MY_VESSEL:PERIAPSIS >= CFG_CIRC_MIN_PERI and ETA:APOAPSIS > ETA:PERIAPSIS) then {
 		set CIRC_ENGINE_CUTOFF_DONE to true.
-		set BALLISTIC_ORBIT to true.
 		lock THROTTLE to 0.
 		set CIRC_GUIDANCE_ACTIVE to false.
 		logMessage(LOGMAJOR,"CIRC COMPLETE - ENGINE CUTOFF").
 		logMessage(LOGADVISORY,"CUTOFF APO " + ROUND(MY_VESSEL:APOAPSIS/1000,1) + "km / PERI " + ROUND(MY_VESSEL:PERIAPSIS/1000,1) + "km").
-		set AUTOPILOT to false.
 	}
 
 	when (MY_VESSEL:ALTITUDE >= CFG_DEPLOY_ACCEL_SAFE_ALT and MY_Q <= CFG_DEPLOY_ACCEL_SAFE_Q and not ACCEL_SAFE_DEPLOYED) then {
@@ -306,7 +306,47 @@ function doTouchDown {
 }
 
 function doTelemetry {
-	logFlightTelemetryBasic(CFG_TELEMETRY_ENABLED, MY_VESSEL, MY_Q, DOWNRANGE, CFG_SRB_NAMES).
+	if CFG_TELEMETRY_ENABLED {
+		logConsole(LOGTELEMETRY,"Q",ROUND(MY_Q,1),6).
+		logConsole(LOGTELEMETRY,"Mass",ROUND(MY_VESSEL:MASS,1),5).
+		logConsole(LOGTELEMETRY,"Vv",ROUND(MY_VESSEL:VERTICALSPEED,1),4).
+		logConsole(LOGTELEMETRY,"APO",ROUND(MY_VESSEL:APOAPSIS/1000,1),3).
+		logConsole(LOGTELEMETRY,"ALT",ROUND(MY_VESSEL:ALTITUDE/1000,1),2).
+		logConsole(LOGTELEMETRY,"DWNRNG",ROUND(DOWNRANGE/1000,1),1).
+
+		local ENGINES is list().
+		local ENGINE_ROW is 15.
+		local ENGINE_COUNT is 0.
+		local TOTAL_THRUST_KN is 0.
+
+		list engines in ENGINES.
+		for EN in ENGINES {
+			if not isSrbEngine(EN) {
+				set ENGINE_COUNT to ENGINE_COUNT + 1.
+				set TOTAL_THRUST_KN to TOTAL_THRUST_KN + EN:THRUST.
+				if ENGINE_ROW > 8 {
+					logConsole(LOGTELEMETRY,"E" + ENGINE_COUNT,ROUND(EN:THRUST,1),ENGINE_ROW).
+					set ENGINE_ROW to ENGINE_ROW - 1.
+				}
+			}
+		}
+
+		logConsole(LOGTELEMETRY,"THRST",ROUND(TOTAL_THRUST_KN,1),7).
+		if ENGINE_COUNT > 7 {
+			logConsole(LOGTELEMETRY,"ENG HIDE",ENGINE_COUNT - 7,8).
+		}
+	}
+}
+
+function isSrbEngine {
+	parameter EN.
+	local ENAME is EN:NAME.
+	for TOKEN in CFG_SRB_NAMES {
+		if ENAME:contains(TOKEN) {
+			return true.
+		}
+	}
+	return false.
 }
 
 function doSetup {
@@ -329,7 +369,7 @@ function doSetup {
 	logMessage(LOGADVISORY,"Wet Mass: " + ROUND(MY_VESSEL:WETMASS,1) + "T").
 	logMessage(LOGADVISORY,"Dry Mass: " + ROUND(MY_VESSEL:DRYMASS,1) + "T").
 	set ENGINE_FUEL_AT_LAUNCH to getResourceAmount(CFG_ENGINE_FUEL_RESOURCE).
-	logMessage(LOGADVISORY,"Core Fuel (" + CFG_ENGINE_FUEL_RESOURCE + "): " + ROUND(ENGINE_FUEL_AT_LAUNCH,1)).
+	logMessage(LOGADVISORY,"Engine Fuel @ Launch (" + CFG_ENGINE_FUEL_RESOURCE + "): " + ROUND(ENGINE_FUEL_AT_LAUNCH,4)).
 }
 
 function doMain {
@@ -339,14 +379,7 @@ function doMain {
 		if (CFG_LOGGING_ENABLED and MYLOGFILE <> "") {
 			if TIME:SECONDS >= NEXT_LOG_TIME {
 				set NEXT_LOG_TIME to NEXT_LOG_TIME + 1.
-				logTelemetryBasic(
-					MYLOGFILE,
-					START_TIME,
-					MY_VESSEL,
-					currentPitchDeg(MY_VESSEL),
-					MY_Q,
-					DOWNRANGE
-				).
+				logTelemetry().
 			}
 		}
 		WAIT 0.
@@ -359,19 +392,14 @@ function doFinalise {
 	logMessage(LOGMAJOR, "FINAL MET: " + currentMETFormatDHMS()).
 	logMessage(LOGMAJOR, "MISSION GOALS:").
 	logMessage(LOGMAJOR, " - Min Apoapsis: " + GOAL_MIN_APO).
-	logMessage(LOGMAJOR, " - Min Periapsis: " + GOAL_MIN_PERI).
+	logMessage(LOGMAJOR, " - Target Apoapsis Band: " + GOAL_TARGET_APO).
+	logMessage(LOGMAJOR, " - Suborbital: " + GOAL_SUBORBITAL).
 	logMessage(LOGMAJOR, " - Min Avionics Time: " + GOAL_AVIONICS_TIME).
+	logMessage(LOGMAJOR, " - Target Apo Reached During Flight: " + TARGET_APO_REACHED).
 	logMessage(LOGMAJOR,"PROGRAM COMPLETE").
-	logMessage(LOGADVISORY,"[X] - HIBERNATE AVIONICS").
-	local HIBERNATE_INPUT is false.
-	until HIBERNATE_INPUT {
-		local CH is terminal:input:getchar().
-		if (CH = "X" or CH = "x") {
-			set HIBERNATE_INPUT to true.
-		}
+	until false {
+		WAIT 1.
 	}
-	logMessage(LOGMAJOR,"AVIONICS HIBERNATED").
-	AG10 ON.
 }
 
 function missionGuidancePitch {
@@ -394,7 +422,27 @@ function missionGuidancePitch {
 		return circPitch(vess, CIRC_GUIDANCE_FLIP).
 	}
 
-	return ascentPitchMechJeb(vess, CFG_PITCH_START_ALT, CFG_CIRC_ALT, CFG_ASCENT_SHAPE_FACTOR, 0).
+	return ascentPitch(vess, CFG_MISSION_MIN_APO, CFG_INITIAL_PITCH).
 }
 
+function logTelemetry {
+	if (not CFG_LOGGING_ENABLED or MYLOGFILE = "") {
+		return.
+	}
+
+	set LOGGED_PITCH to currentPitchDeg(MY_VESSEL).
+	log
+		(TIME:SECONDS - START_TIME)
+		+ ","
+		+ MY_VESSEL:ALTITUDE
+		+ ","
+		+ LOGGED_PITCH
+		+ ","
+		+ MY_Q
+		+ ","
+		+ MY_VESSEL:APOAPSIS
+		+ ","
+		+ DOWNRANGE
+	to MYLOGFILE.
+}
 

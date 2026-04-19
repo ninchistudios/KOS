@@ -9,6 +9,7 @@ local TICK is 0.
 local HIGHEST_Q is 0.
 local NO_STAGE_BEFORE is 0.
 
+// pitch control for circularisation
 local CPp is 0.04.
 local CPi is 0.01.
 local CPd is 0.15.
@@ -53,19 +54,77 @@ function ascentThrottle {
 	return MAX(Tmin, (Tmax - (scale * (Tmax - Tmin)))).
 }
 
+// todo implement a heading to achieve a target inclination
 function ascentHeading {
 	parameter tgt_incl.
 	return tgt_incl.
 }
 
+// ascent with PID on exponential path
+function ascentPitchPID {
+	parameter vess, tgtApo, initialPitch, shapeFactor, maxAoA.
+	if vess:APOAPSIS <= 0 {
+		return initialPitch.
+	}
+
+	local apoTarget is MAX(1, tgtApo).
+	local normAlt is MAX(0, MIN(1, vess:ALTITUDE / apoTarget)).
+	local expK is MAX(0.1, ABS(shapeFactor) / 10).
+	local pathFrac is 1 - constant:e ^ (-expK * normAlt).
+	local pathApo is MAX(1, apoTarget * pathFrac).
+
+	if (ASC_PITCH <= 0 or ASC_PITCH > initialPitch) {
+		set ASC_PITCH to currentPitchDeg(vess).
+	}
+
+	set ASPID:SETPOINT to pathApo.
+	set ASC_PITCH to min(initialPitch, ASC_PITCH + ASPID:UPDATE(TIME:seconds, vess:APOAPSIS)).
+
+	local currPitch is currentPitchDeg(vess).
+	local qKpa is vess:Q * constant:ATMtokPa.
+	if (vess:ALTITUDE < (tgtApo * 0.08) and qKpa > 20) {
+		// In max-Q regime, keep pitch commands in a tight band to prevent flips.
+		local maxPitchCmd is currPitch.
+		local minPitchCmd is currPitch - 1.0.
+		set ASC_PITCH to max(minPitchCmd, min(ASC_PITCH, maxPitchCmd)).
+	}
+
+	if maxAoA > 0 {
+		local progradePitch is 90 - VANG(vess:VELOCITY:SURFACE, vess:UP:FOREVECTOR).
+		local maxPitchByAoA is progradePitch + maxAoA.
+		set ASC_PITCH to max(0, min(ASC_PITCH, maxPitchByAoA)).
+	} else {
+		set ASC_PITCH to max(0, ASC_PITCH).
+	}
+
+	return ASC_PITCH.
+}
+
+// ascent using MechJeb-style turn-shape formula (no PID, no AoA limiting)
+function ascentPitchMechJeb {
+	parameter vess, turnStartAlt, turnEndAlt, turnShapeExponent, turnEndAngle is 0.
+	local safeTurnEnd is MAX(turnStartAlt + 0.001, turnEndAlt).
+	local turnFraction is (vess:ALTITUDE - turnStartAlt) / (safeTurnEnd - turnStartAlt).
+	set turnFraction to MAX(0, MIN(1, turnFraction)).
+	local pitchCmd is 90 - ((turnFraction ^ turnShapeExponent) * (90 - turnEndAngle)).
+	return MAX(0.01, MIN(89.99, pitchCmd)).
+}
+
 // ascent on a logarithmic path
 function ascentPitch {
-	parameter vess, targetApo, initialPitch.
+	parameter vess, targetApo, initialPitch, shapeFactor, maxAoA.
 	if vess:APOAPSIS <= 0 { return initialPitch. }
 	local apoTarget is MAX(1, targetApo).
 	local c is 1 / apoTarget.
-	local tp is min(initialPitch,-40 * ln(vess:APOAPSIS * c)).
-	return max(0, tp).
+	local tp is min(initialPitch,shapeFactor * ln(vess:APOAPSIS * c)).
+	if maxAoA > 0 {
+		local progradePitch is 90 - VANG(vess:VELOCITY:SURFACE, vess:UP:FOREVECTOR).
+		local maxPitchByAoA is progradePitch + maxAoA.
+		return max(0, min(tp, maxPitchByAoA)).
+	} else {
+		return max(0, tp).
+	}
+	
 }
 
 // vacuum accel-safe deployments (e.g. fairings) should be set to AG8
